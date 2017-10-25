@@ -1,4 +1,8 @@
 import matplotlib
+
+from src.irl.meirl import MaxEntIRLAgent
+from src.misc.utils import normalize
+
 matplotlib.use("Agg")
 import numpy as np
 import tensorflow as tf
@@ -16,7 +20,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
     def svi(self, r, name="soft_vi"):
         with ops.name_scope(name, "soft_vi_pyfunc", [r]) as scope:
-            svi_x = tensor_utils.py_func(self.approximate_value_iteration,
+            svi_x = py_func(self.approximate_value_iteration,
                                          [r],
                                          [tf.float32],
                                          name=scope,
@@ -28,7 +32,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
     def esvf(self, p, name="esvf"):
         with ops.name_scope(name, "esvf_pyfunc", [p]) as scope:
-            esvf_x = tensor_utils.py_func(self.state_visitation_frequency,
+            esvf_x = py_func(self.state_visitation_frequency,
                                           [p],
                                           [tf.float32],
                                           name=scope,
@@ -60,7 +64,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
     def LD(self, r, name="data_loss"):
         with ops.name_scope(name, "data_loss", [r]) as scope:
-            ld_r = tensor_utils.py_func(self.loss_func,
+            ld_r = py_func(self.loss_func,
                                         [r],
                                         [tf.float32, tf.float32],
                                         name=scope,
@@ -170,3 +174,14 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
                      range(N_STATES)])
     p = np.sum(mu, 1)
     return p
+
+
+# Define custom py_func which takes also a grad op as argument:
+def py_func(func, inp, Tout, stateful=True, name=None, grad=None):
+    # Need to generate a unique name to avoid duplicates:
+    rnd_name = 'PyFuncGrad' + str(np.random.randint(0, int(1E+8)))
+
+    tf.RegisterGradient(rnd_name)(grad)
+    g = tf.get_default_graph()
+    with g.gradient_override_map({"PyFunc": rnd_name}):
+        return tf.py_func(func, inp, Tout, stateful=stateful, name=name)
