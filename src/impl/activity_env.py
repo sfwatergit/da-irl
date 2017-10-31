@@ -80,7 +80,7 @@ class ActivityEnv(gym.Env):
             for t, step in enumerate(trajectory):
                 tup = (step, t)
                 if tup in self.G.node:
-                    state_ix = self.G.node[tup]['state'].state_id
+                    state_ix = self.G.node[tup]['attr_dict']['state'].state_id
                     if len(states) > 0:
                         prev_state = self.states[states[-1]]
                         state = self.states[state_ix]
@@ -92,7 +92,7 @@ class ActivityEnv(gym.Env):
                                              if (s_type == self.actions[act].succ_ix)]
                         if len(available_actions) == 0:
                             break
-                        act_ix = available_actions[0].state_id
+                        act_ix = available_actions[0].action_id
                         actions.append(act_ix)
                     states.append(state_ix)
             paths.append(np.array(zip(states, actions)))
@@ -214,7 +214,7 @@ class ActivityEnv(gym.Env):
         if len(data) > 0:
             ns = self.G.node[[data[0]][0]]
             if len(ns) > 0:
-                return ns['state']
+                return ns['attr_dict']['state']
             else:
                 return self.home_state
         else:

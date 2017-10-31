@@ -21,7 +21,7 @@ def make_time_string(mm):
     return "{}:{}".format(hh_str, mm_str)
 
 
-def min_hr_to_min(hh,mm):
+def t2n(hh, mm):
     return hh * 60+mm
 
 
@@ -47,7 +47,7 @@ def normalize(vals):
     min_val = np.min(vals)
     max_val = np.max(vals)
     return (vals - min_val) / (max_val - min_val)
-InsideOut
+
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__

@@ -8,7 +8,7 @@
   },
   "irlParams": {
     "segment_minutes": 15,
-    "plans_file_url": "/Users/sfeygin/remote_files/pp_out_1617/01/it.80/01.80.plans.xml",
+    "plans_file_url": "/Users/sfeygin/remote_files/pp_out_1617/01/it.80/01.80.plans.",
     "pop_limit": 5000,
     "num_iters": 50
   },

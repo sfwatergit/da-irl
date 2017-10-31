@@ -8,7 +8,7 @@
   },
   "irlParams": {
     "segment_minutes": 15,
-    "plans_file_url": "/Users/sfeygin/current_code/python/da-irl/data/misc/IRL.output_plans.xml",
+    "plans_file_url": "/Users/sfeygin/PycharmProjects/da-irl/data/misc/IRL.output_plans.xml",
     "pop_limit": 900,
     "num_iters": 50
   },
