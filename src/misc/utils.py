@@ -7,6 +7,24 @@ import numpy as np
 FNOPTS = dict(allow_input_downcast=True, on_unused_input='ignore')
 
 
+def make_time_string(mm):
+    # type: (int) -> str
+    """
+    Convert minutes since mignight to hrs.
+
+    :rtype: str
+    :param mm: minutes since midnight
+    :return: Time in HH:MM notation
+    """
+    mm_str = str(mm % 60).zfill(2)
+    hh_str = str(mm // 60).zfill(2)
+    return "{}:{}".format(hh_str, mm_str)
+
+
+def min_hr_to_min(hh,mm):
+    return hh * 60+mm
+
+
 def create_dir_if_not_exists(dir_name):
     # type: (str) -> None
     if not path.exists(dir_name):
@@ -29,7 +47,7 @@ def normalize(vals):
     min_val = np.min(vals)
     max_val = np.max(vals)
     return (vals - min_val) / (max_val - min_val)
-
+InsideOut
 
 def lazy_property(function):
     attribute = '_cache_' + function.__name__

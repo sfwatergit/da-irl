@@ -54,7 +54,7 @@ class ActivityRewardFunction(RewardFunction):
         r = np.zeros((self._env.nS, self._env.nA))
         for state in self._env.states.values():
             for a in state.available_actions:
-                s = state.id
+                s = state.state_id
                 r[s, a] = np.dot(theta, self.phi(s, a))
         self._r = r
 

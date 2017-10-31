@@ -320,7 +320,7 @@ def create_act_at_x_features(where, when,interval_length, params):
         current_activity = state.activity_type
         if current_activity != self.where:
             return np.array([0])
-        activity_end = state.end_time
+        activity_end = state.get_end_time
 
         opening_time = str_to_mins(self.params.activity_params[current_activity]['openingTime'])
         closing_time = str_to_mins(self.params.activity_params[current_activity]['closingTime'])

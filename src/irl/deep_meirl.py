@@ -1,3 +1,7 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 import matplotlib
 
 from src.irl.meirl import MaxEntIRLAgent
@@ -44,9 +48,9 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
     def loss_func(self, r):
         pi = self.approximate_value_iteration(r)
-        print "Soft value iteration done, finding state visitation frequency..."
+        print( "Soft value iteration done, finding state visitation frequency...")
         expected_svf = self.state_visitation_frequency(pi)
-        savf = self.find_empirical_state_action_occupancy_frequency()
+        savf = self.get_empirical_savf()
 
         D_sa = np.zeros((self.nS, self.nA), dtype=np.float32)
         for s in self.mdp.S:
@@ -59,7 +63,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
         loss = savf * np.log(pi)
         fd = np.mean(diff)
         self.feature_diff.append(fd)
-        print diff
+        print (diff)
         return loss, diff
 
     def LD(self, r, name="data_loss"):
@@ -96,7 +100,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
         self._current_examples = self.demos
 
-        mu_D = self.find_empirical_state_action_occupancy_frequency()
+        mu_D = self.get_empirical_savf()
 
         for i in xrange(N):
             reward = nn_r.get_rewards(fm).reshape((nS, nA))
@@ -117,7 +121,7 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
             self.feature_diff.append(l2_loss)
 
-            print l2_loss
+            print (l2_loss)
 
         rewards = nn_r.get_rewards(fm).reshape((nS, nA))
         return normalize(rewards)

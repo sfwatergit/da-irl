@@ -1,3 +1,7 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 import numpy as np
 
 TRIP = "Trip"
@@ -5,20 +9,14 @@ LEG = "Leg"
 ACTIVITY = "Activity"
 
 
-class Trajectory(object):
-    def __init__(self, start_time, end_time):
+class Tour(object):
+    def __init__(self, start_time, end_time, primary_activity=None):
         self.start_time = start_time
         self.end_time = end_time
-        self._duration = None
-
-    @property
-    def duration(self):
-        if self._duration is None:
-            self._duration = self.end_time - self.start_time
-        return self._duration
+        self.primary_activity = primary_activity
 
 
-class TourElement(Trajectory):
+class TourElement(object):
     """
     Base class for journeys and activities, which comprise the `TourElements`
     of a `Person's` `Schedule`
@@ -30,11 +28,19 @@ class TourElement(Trajectory):
     """
 
     def __init__(self, ident, kind, start_time=None, end_time=None, next_activity=None, prev_activity=None):
-        super(TourElement, self).__init__(start_time, end_time)
+        self.start_time = start_time
+        self.end_time = end_time
         self.next_activity = next_activity
         self.prev_activity = prev_activity
         self.ident = ident
         self.kind = kind
+        self._duration = None
+
+    @property
+    def duration(self):
+        if self._duration is None:
+            self._duration = self.end_time - self.start_time
+        return self._duration
 
     def set_previous_activity(self, activity):
         self.next_activity = activity
@@ -49,7 +55,7 @@ class TourElement(Trajectory):
         return "{}: {}".format(self.kind, self.ident)
 
 
-class Activity(TourElement):
+class ActivityEpisode(TourElement):
     """
     Activity that traveler participates in during daily schedule. Has a well-defined location.
 
@@ -69,7 +75,7 @@ class Activity(TourElement):
         self.is_last = is_last
 
 
-class Trip(TourElement):
+class TripEpisode(TourElement):
     """
     Sequence of legs on trip
 
@@ -89,13 +95,13 @@ class Trip(TourElement):
         return self.trav_time
 
 
-class Leg(TourElement):
+class Segment(TourElement):
     """
     Travel leg between main 'activities in daily schedule.
     """
     def __init__(self, start_time, end_time, mode, trav_time, distance=0., next_activity=None, prev_activity=None):
-        super(Leg, self).__init__(mode, kind=LEG, start_time=start_time, end_time=end_time, next_activity=next_activity,
-                                  prev_activity=prev_activity)
+        super(Segment, self).__init__(mode, kind=LEG, start_time=start_time, end_time=end_time, next_activity=next_activity,
+                                      prev_activity=prev_activity)
         self._distance = distance
         self.trav_time = trav_time
 
@@ -138,8 +144,8 @@ class ActivityTravelPattern(object):
 
     def compute_plan_utility(self):
         for el in self._tour_elems:
-            if isinstance(el, Activity):
+            if isinstance(el, ActivityEpisode):
                 self.add_score(el.ident, self._activity_scoring_function(el))
-            elif isinstance(el, Leg):
+            elif isinstance(el, Segment):
                 self.add_score(el.ident, self._trip_scoring_function(el))
         return self._score_map

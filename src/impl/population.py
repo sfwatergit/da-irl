@@ -1,3 +1,9 @@
+
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
+
 import operator
 import os.path
 from xml.etree.cElementTree import iterparse
@@ -7,7 +13,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from src.impl.trajectory import Activity, Leg
+from src.impl.tour import ActivityEpisode, Segment
 
 DAY_SECS = 86400
 NUM_HRS_AT_END = 30
@@ -59,7 +65,7 @@ class ExpertTrajectoryData(object):
                 trajectories.append(segment_sequence(seq, self._seg_minutes))
             else:
                 discarded += 1
-        print "Discarded {} trajectories for ending past {} hrs".format(discarded, NUM_HRS_AT_END)
+        print("Discarded {} trajectories for ending past {} hrs".format(discarded, NUM_HRS_AT_END))
 
         return self._traj_to_mat(trajectories)
 
@@ -69,7 +75,7 @@ class ExpertTrajectoryData(object):
         for person in self._pop:
             plan = person.plans[0]
             for el in plan:
-                if isinstance(el, Activity):
+                if isinstance(el, ActivityEpisode):
                     #                 print el.next_activity.ident
                     if el.ident == self._work_act:
                         ids.append(int(person.pid))
@@ -163,7 +169,7 @@ class PopulationParser(object):
         trav_time = str_to_secs(leg.attrib['trav_time'])
         distance = float(leg.getchildren()[0].attrib['distance'])
         end_time = start_time + trav_time
-        return Leg(start_time, end_time, mode, trav_time, distance=distance)
+        return Segment(start_time, end_time, mode, trav_time, distance=distance)
 
     def parse_activity(self, activity, start_time, is_last_activity_of_day=False):
         attrib = activity.attrib
@@ -180,7 +186,7 @@ class PopulationParser(object):
         else:
             end_time = str_to_secs(activity.attrib['end_time'])
 
-        return Activity(activity_type, x, y, start_time, end_time)
+        return ActivityEpisode(activity_type, x, y, start_time, end_time)
 
 
 def segment_sequence(sequence, seg_minutes):

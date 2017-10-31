@@ -14,12 +14,13 @@ from cytoolz import memoize
 
 
 class MDP(object):
-    def __init__(self, reward, transition, graph, gamma, env):
+    def __init__(self, reward, transition, graph, gamma, env,terminals=None):
         self._G = graph
         self._reward = reward
         self._transition = transition
         self._gamma = gamma
         self._env = env
+        self._terminals = terminals
 
     @property
     def env(self):
@@ -62,12 +63,13 @@ class MDP(object):
     def T(self, state, action):
         return self._transition(state, action)
 
-    def is_terminal(self, state):
-        raise NotImplementedError
+    @property
+    def terminals(self):
+        return self._terminals
 
-    def initialize(self):
+    def initial_state_distribution(self):
         """
-        Return the initial state the MDP.
+        Return the initial state distribution of the MDP.
         """
         raise NotImplementedError
 
@@ -112,28 +114,6 @@ class TransitionFunction:
         raise NotImplementedError('Abstract method')
 
 
-class MDPLocalController(six.with_metaclass(ABCMeta)):
-    """ A MDP local controller
-
-    Representing multiple step transition, which can be interpreted as a
-    Markov option with only one possible terminal state.
-
-    """
-
-    def __init__(self, env):
-        self._env = env
-
-    @abstractmethod
-    def __call__(self, state, action, duration, **kwargs):
-        """ Execute the local controller """
-        raise NotImplementedError('Abstract method')
-
-    @abstractmethod
-    def trajectory(self, source, target, **kwargs):
-        """ Compute the trajectory/policy between two states """
-        raise NotImplementedError('Abstract')
-
-
 class State(Hashable):
     """ MDP State
 
@@ -145,7 +125,7 @@ class State(Hashable):
 
     def __init__(self, state_id):
         super(State, self).__init__()
-        self._id = state_id
+        self._state_id = state_id
 
     @abstractmethod
     def __hash__(self):
@@ -153,9 +133,9 @@ class State(Hashable):
         raise ValueError('Implement a hash function')
 
     @property
-    def id(self):
+    def state_id(self):
         """ State unique identifier """
-        return self._id
+        return self._state_id
 
     @abstractmethod
     def __eq__(self, other):
@@ -174,7 +154,7 @@ class Action(Hashable):
 
     def __init__(self, action_id):
         super(Action, self).__init__()
-        self._id = action_id
+        self._action_id = action_id
 
     @abstractmethod
     def __hash__(self):
@@ -182,9 +162,9 @@ class Action(Hashable):
         raise ValueError('Implement a hash function')
 
     @property
-    def id(self):
+    def action_id(self):
         """ Action unique identifier """
-        return self._id
+        return self._action_id
 
     @abstractmethod
     def __eq__(self, other):
@@ -226,7 +206,7 @@ class RewardFunction(object):
             self._feature_matrix = np.zeros((self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
             for state in self._env.states.values():
                 actions = state.available_actions
-                s = state.id
+                s = state.state_id
                 for a in actions:
                     if s in self._env.terminals:
                         self._feature_matrix[s, a] = np.zeros(self._dim_ss, 1)
