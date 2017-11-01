@@ -5,10 +5,22 @@ from __future__ import (
 import functools
 import inspect
 from os import path, makedirs
-from functools import reduce
+
 import numpy as np
 
 FNOPTS = dict(allow_input_downcast=True, on_unused_input='ignore')
+
+
+def to_onehot(ind, dim):
+    ret = np.zeros(dim)
+    ret[ind] = 1.0
+    return ret
+
+
+def to_onehot_n(inds, dim):
+    ret = np.zeros((len(inds), dim))
+    ret[np.arange(len(inds)), inds] = 1
+    return ret
 
 
 def make_time_string(mm):
@@ -26,7 +38,7 @@ def make_time_string(mm):
 
 
 def t2n(hh, mm):
-    return hh * 60+mm
+    return hh * 60 + mm
 
 
 def create_dir_if_not_exists(dir_name):
@@ -105,6 +117,7 @@ def softmax(x, t=1):
             n is the number of rows (=x.shape[0]) if x was 2D.
     '''
     assert t >= 0
+    x = np.asarray(x)
     if len(x.shape) == 1: x = x.reshape((1, -1))
     if t == 0: return np.amax(x, axis=1)
     if x.shape[1] == 1: return x
@@ -138,6 +151,39 @@ def softmax(x, t=1):
     for (i, x_i) in enumerate(x.T):
         if i > 1: sm = softmax_2_arg(sm, x_i, t)
     return sm
+
+
+def mellowmax(x, t=1):
+    '''
+    Numerically stable computation of mellowmax t*log(1/n \sum_j^n exp(x_j/t))
+
+    As per http://proceedings.mlr.press/v70/asadi17a/asadi17a.pdf, this is a
+    better version of softmax since mellowmax is a non-expansion an softmax is
+    not. The problem is that softmax(1,1,1) is not 1, but instead log(3).
+    This causes the softmax value iteration to grow unnecessarily in ie cases
+    with no positive reward loops when \gamma=1 and regular value iteration
+    would converge.
+
+    If the input is a 1D numpy array, computes it's mellowmax:
+        output = t*log(1/n * \sum_j^n exp(x_j / t)).
+    If the input is a 2D numpy array, computes the mellowmax of each row:
+        output_i = t*log(1/n \sum_j^n exp(x_{ij} / t))
+
+    Parameters
+    ----------
+    x : 1D or 2D numpy array
+
+    Returns
+    -------
+    1D numpy array
+        shape = (n,), where:
+            n = 1 if x was 1D, or
+            n is the number of rows (=x.shape[0]) if x was 2D.
+    '''
+    x = np.asarray(x)
+    if len(x.shape) == 1: x = x.reshape((1, -1))
+    sm = softmax(x, t=t)
+    return sm - t * np.log(x.shape[1])
 
 
 def adam(x, dx, config=None):

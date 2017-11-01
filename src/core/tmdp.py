@@ -2,12 +2,11 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
-import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import *
-
+import numpy as np
 from src.core.mdp import State, Action, MDP, TransitionFunction
-from src.misc.utils import make_time_string, t2n
-import re
+from src.misc.utils import make_time_string, t2n, softmax
 
 ABS = 0
 REL = 1
@@ -15,16 +14,18 @@ REL = 1
 
 class TMDPTransition(TransitionFunction):
     def __init__(self, env=None):
-        TransitionFunction.__init__(self,env)
+        TransitionFunction.__init__(self, env)
 
-    def __call__(self, state, action,**kwargs):
+    def __call__(self, state, action, **kwargs):
         pass
 
 
 class TMDPState(State):
-    def __init__(self, state_id, time_index):
+    def __init__(self, state_id, state_label, time_index):
         super(TMDPState, self).__init__(state_id)
+        self.state_label = state_label
         self.time_index = time_index
+        self.time_label = make_time_string(self.time_index)
         self._actions = {}
 
     def actions(self):
@@ -48,7 +49,7 @@ class TMDPState(State):
         return self.state_id == other.state_id and self.time_index == other.time_index
 
     def __str__(self):
-        return '({} @ {})'.format(self.state_id, make_time_string(self.time_index))
+        return '[{} @ {}]'.format(self.state_label, self.time_label)
 
     def __repr__(self):
         return self.__str__()
@@ -84,8 +85,6 @@ class TMDPAction(Action):
         return hash(self.action_id)
 
 
-
-
 class TMDP(MDP):
     def __init__(self, reward,
                  transition,
@@ -100,13 +99,11 @@ class TMDP(MDP):
         self._actions = None
         self.state_types = state_types
         self._initial_state = initial_state
-        self.T = horizon
+        self.horizon = horizon
         self.disc = discretization  # assumed in minutes for now
-        self._tidx = int(self.T / self.disc)
-        self._states = np.zeros([len(self.state_types),
-                                 self._tidx], dtype=object)
-        self._make_terminal_states()
-
+        self._tidx = int(self.horizon / self.disc)
+        self._states = np.zeros([len(self.state_types), self._tidx], dtype=object)
+        self._terminals = None
 
     def set_outcomes(self, outcomes):
         raise NotImplementedError
@@ -129,17 +126,36 @@ class TMDP(MDP):
     def get_outcome(self, s, t, a):
         return self._states[s][t].get_random_outcome(a)
 
+    def approximate_value_iteration(self, r, threshold=1e-16, gamma=1, temperature=1):
 
-    def approximate_value_iteration(self,reward, threshold = 1e-16, gamma=1):
-        V = np.zeros_like(reward,dtype=np.float32)
+        nA = len(self._action_dict.keys())
+        nS = len(self._states)
+        V = np.zeros(nS, dtype=np.float64)
+        Q = np.zeros([nS, nA], dtype=np.float64)
+        i = 0
         diff = float("inf")
-        while diff> threshold:
-            V_prev = np.copy(V)
-            Q = reward.reshape((-1,1))+gamma
-        return V, Q
 
-    def _make_terminal_states(self):
-        pass
+        while diff>threshold:
+            V_prev = np.copy(V)
+
+            for s_idx, state_x in enumerate(self.S):
+                if state_x in self._terminals:
+                    continue
+                actions = state_x.actions()
+                for a in actions:
+                    Q[s_idx,a] = sum([o[0] * (r[s_idx][o[1].state_id] + V_prev[o[1].state_id])
+                                         for o in actions[a].outcomes])
+                V = softmax(Q, temperature)
+            diff = np.amax(abs(V_prev - V))
+
+            i += 1
+            print(diff)
+            print(i)
+            if diff == 0:
+                V = V.reshape((-1, 1))
+                expt = lambda x: np.exp(x / temperature)
+                policy = expt(Q - V)
+                return policy, Q, V
 
     def _assign_pdf_abs(self, s_to, time_span, scale):
         start, middle, end = time_span
@@ -163,22 +179,45 @@ class TMDP(MDP):
         return zip(rescaled, states)
 
 
+def mk_Trans_mat(mdp):
+    s_arr = np.array([s for sub in mdp.S for s in sub])
+    a_arr = np.array(mdp.A.keys())
+    nS = len(s_arr)
+    nA = len(a_arr)
+    P = np.zeros([nA, nS, nS], dtype=np.float32)
+    for s in s_arr:
+        for a_idx, a in s.actions().items():
+            outcomes = a.outcomes
+            sps = [o.state_id for o in outcomes[:, 1]]
+            ps = [p for p in outcomes[:, 0]]
+            for p, sp in zip(ps, sps):
+                P[a_idx, s.state_id, sp] = p
+    return P
+
+
 def initialize_mdp(mdp):
     action_dict = mdp._action_dict
 
-    for s, label in enumerate(mdp.state_types):
-        mdp._states[s][-1] = TMDPState(label, mdp.T - mdp.disc)
-
     ## A0|dawdling (all states):
     k, v = action_dict.items()[0]
+
+    s_id = mdp._tidx - 1
     for s, label in enumerate(mdp.state_types):
-        st = list(reversed(range(mdp._tidx - 1)))
-        for t, tidx in zip(st, np.arange(mdp.T - 2 * mdp.disc, -mdp.disc, -mdp.disc)):
-            state = TMDPState(label, tidx)
-            dawdling = TMDPAction(k, v)
-            dawdling.add_outcome([mdp._states[s][t + 1], 1.0])
-            state.add_action(dawdling)
+        st = list(reversed(range(mdp._tidx)))
+        for t, tidx in zip(st, np.arange(mdp.horizon - mdp.disc, -mdp.disc, -mdp.disc)):
+            if t == mdp._states.shape[1] - 1:
+                state = TMDPState(s_id, label, mdp.horizon - mdp.disc)
+                dawdling = TMDPAction(k, v)
+                dawdling.add_outcome([1.0, state])
+                state.add_action(dawdling)
+            else:
+                state = TMDPState(s_id, label, tidx)
+                dawdling = TMDPAction(k, v)
+                dawdling.add_outcome([1.0, mdp._states[s][t + 1]])
+                state.add_action(dawdling)
             mdp._states[s][t] = state
+            s_id -= 1
+        s_id = ((s + 2) * mdp._tidx) - 1
 
     ## A1|morning commute by pt:
     k, v = action_dict.items()[1]
@@ -224,7 +263,7 @@ def initialize_mdp(mdp):
     ##
     sf, st = int(t2n(8, 00) / mdp.disc), int(t2n(9, 30) / mdp.disc)
     rush_hr_ts = mk_ts([[0, 30], [2, 20], [6, 0]])
-    for t in range(sf, st):   # 8:00 ~ 9:30
+    for t in range(sf, st):  # 8:00 ~ 9:30
         drive_hway = TMDPAction(k, v)
         drive_hway.outcomes = mdp._assign_pdf_rel(1, t, rush_hr_ts, car_sd)
         mdp._states[0][t].add_action(drive_hway)
@@ -258,36 +297,37 @@ def initialize_mdp(mdp):
         new_tid = t + int(t2n(1, 00) / 10)
         drive_hway = TMDPAction(k, v)
         if new_tid < mdp._tidx:
-            drive_hway.outcomes=[(1.0, mdp._states[2][new_tid])]
+            drive_hway.outcomes = [(1.0, mdp._states[2][new_tid])]
         else:
             drive_hway.outcomes = [(1.0, mdp._states[2][mdp._tidx - 1])]
         mdp._states[1][t].add_action(drive_hway)
+    mdp._terminals = [s[-1] for s in mdp._states]
+    mdp.T = mk_Trans_mat(mdp)
+    mdp._states = [s for sub in mdp.S for s in sub]
+    return mdp
 
 
 def mk_ts(arr):
     return tuple(map(lambda x: t2n(x[0], x[1]), (arr[0], arr[1], arr[2])))
 
-def init_rewards(activity_types, states):
-    pat = re.compile('^.*\w(\d+:\d+)$')
 
-    rewards = dict()
-    for s_from,from_label in enumerate(activity_types):
-        rewards[s_from] = dict()
-        for s_to,to_label in enumerate(activity_types):
-            if to_label == 'Work' and from_label != 'Work':
-                for state in states[s_from]:
-                    a,b = str(state).split(":")
-                    b=b.strip(')')
-                    a=a.split(' ')[-1]
-                    time = t2n(*tuple([int(e) for e in (a,b)]))
-                    if time < t2n(11, 00):
-                        rewards[s_from][state.time_index] = 1.0  # +1 for arriving at work before 11:00
-                    elif time < t2n(12, 00):
-                        rewards[s_from][state.time_index] = float((t2n(12, 00) - time) / t2n(1, 00))  # falls linearly to zero (11:00 ~ 12:00)
-                    else:
-                        rewards[s_from][state.time_index] = 0.0
+def init_rewards(states):
+    dim_s = len(states)
+    rewards = np.zeros([dim_s, dim_s], dtype=np.float32)
+    for s_from in states:
+        for s_to in states:
+            if s_to.state_label == 'Work' and s_from.state_label != 'Work':
+                a, b = s_to.time_label.split(":")
+                time = t2n(*tuple([int(e) for e in (a, b)]))
+                if time < t2n(11, 00):
+                    rewards[s_from.state_id][s_to.state_id] = 1.0  # +1 for arriving at work before 11:00
+                elif time < t2n(12, 00):
+                    rewards[s_from.state_id][s_to.state_id] = (t2n(12, 00) - time) / t2n(1,
+                                                                                         00)  # falls linearly to zero (11:00 ~ 12:00)
                 else:
-                    rewards[s_from][state.time_index] = 0.0
+                    rewards[s_from.state_id][s_to.state_id] = 0.0
+            else:
+                rewards[s_from.state_id][s_to.state_id] = 0.0
     return rewards
 
 
@@ -295,9 +335,11 @@ if __name__ == '__main__':
     activity_types = ['Home', 'Work', 'x2']
     action_types = ['dawdling', 'commute_by_pt', 'driving to work via highway', 'driving on backroad']
 
-    mdp = TMDP(None, None, 1440, 10, 'home', activity_types,
+    mdp = TMDP(None, None, 1200, 10, 'home', activity_types,
                action_types)
     initialize_mdp(mdp)
-    reward = init_rewards(activity_types,mdp.S)
-    mdp.approximate_value_iteration(reward)
-    print('done!')
+    reward = init_rewards(mdp.S)
+    p,Q,V = mdp.approximate_value_iteration(reward)
+    plt.plot(range(len(V)), V)
+    plt.show()
+    print(p.sum(1))
