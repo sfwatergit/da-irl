@@ -1,3 +1,6 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
 # TODO:
 # 1. Remove self._G and gamma in MDP since they are not part
 # of problem definitions.
@@ -5,16 +8,17 @@
 #
 # modified from
 # https://github.com/makokal/funzo/blob/master/funzo/models/mdp.py
+import inspect
 from abc import abstractmethod, abstractproperty, ABCMeta
 from collections import Hashable
-
+from functools import reduce
 import numpy as np
 import six
 from cytoolz import memoize
 
 
-class MDP(object):
-    def __init__(self, reward, transition, graph, gamma, env,terminals=None):
+class MDP(six.with_metaclass(ABCMeta)):
+    def __init__(self, reward, transition, graph, gamma, env, terminals=None):
         self._G = graph
         self._reward = reward
         self._transition = transition
@@ -74,7 +78,7 @@ class MDP(object):
         raise NotImplementedError
 
 
-class TransitionFunction:
+class TransitionFunction(six.with_metaclass(ABCMeta)):
     """ A MDP single step transition function
 
     .. math::
@@ -103,8 +107,7 @@ class TransitionFunction:
     def __init__(self, env=None):
         self.env = env
 
-    @abstractmethod
-    def __call__(self, state, action, **kwargs):
+    def __call__(seZlf, state, action, **kwargs):
         """ Execute the transition function
 
          Run the controller at `state` using `action` with optional parameters
@@ -114,7 +117,7 @@ class TransitionFunction:
         raise NotImplementedError('Abstract method')
 
 
-class State(Hashable):
+class State(six.with_metaclass(ABCMeta, Hashable)):
     """ MDP State
 
     A state in an MDP with all the relevant domain specific data. Such data
@@ -143,7 +146,7 @@ class State(Hashable):
         raise NotImplementedError('Implement equality of states')
 
 
-class Action(Hashable):
+class Action(six.with_metaclass(ABCMeta, Hashable)):
     """ MDP Action
 
     An action in an MDP with all the relevant domain specific data. Such data
@@ -172,14 +175,14 @@ class Action(Hashable):
         raise NotImplementedError('Implement equality of actions')
 
 
-class RewardFunction(object):
+class RewardFunction(six.with_metaclass(ABCMeta)):
     def __init__(self, features, env=None, rmax=1.0):
         # keep a reference to parent MDP to get access to environment and
         # dynamics
         self._features = features
         self._env = env
         self._rmax = rmax
-        self._dim_ss = reduce(lambda x, y: x + y, map(lambda x: len(x), features))
+        self._dim_ss = reduce(lambda x, y: x + y, [len(x) for x in features])
         self._weights = np.random.normal(size=(1, self._dim_ss))
         self._feature_matrix = None
         self._r = None
@@ -204,7 +207,7 @@ class RewardFunction(object):
     def feature_matrix(self):
         if self._feature_matrix is None:
             self._feature_matrix = np.zeros((self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
-            for state in self._env.states.values():
+            for state in list(self._env.states.values()):
                 actions = state.available_actions
                 s = state.state_id
                 for a in actions:
@@ -223,7 +226,55 @@ class RewardFunction(object):
         return np.concatenate([feature(state, action) for feature in self._features])
 
 
-class FeatureExtractor(object):
+class LinearRewardFunction(six.with_metaclass(ABCMeta, RewardFunction)):
+    """ RewardFunction using linear function approximation
+    The reward funtion is define as,
+    .. math::
+        r(s, a) = \sum_i w_i \phi_i(s, a)
+    where :math:`\phi_i(s, a)` is a feature defined over state and action
+    spaces of the underlying MDP. The ``weights`` are the parameters of the
+    model and are usually assumed to sum to 1 to ensure that the reward
+    remains bounded, a typical assumption used in most RL planners.
+    """
+
+    _template = '_feature_'
+
+    def __init__(self, weights, rmax=1.0, env=None):
+        super(LinearRewardFunction, self).__init__(rmax, env)
+        self._weights = np.asarray(weights)
+        assert self._weights.ndim == 1, 'Weights must be 1D arrays'
+
+    def update_parameters(self, **kwargs):
+        """ Update the weights parameters of the reward function model """
+        if 'reward' in kwargs:
+            w = np.asarray(kwargs['reward'])
+            assert w.shape == self._weights.shape, \
+                'New weight array size must match reward function dimension'
+            self._weights = w
+
+    @property
+    def kind(self):
+        """ Type of reward function (e.g. tabular, LFA) """
+        return 'LFA'
+
+    @abstractmethod
+    def phi(self, state, action):
+        """ Evaluate the reward features for state-action pair """
+        raise NotImplementedError('abstract')
+
+    def __len__(self):
+        """ Dimension of the reward function in the case of LFA """
+        # - count all class members named '_feature_{x}'
+        dim = 0
+        for name in self.__class__.__dict__:
+            item = getattr(self.__class__, name)
+            if inspect.ismethod(item):
+                if item.__name__.startswith(self._template):
+                    dim += 1
+        return dim
+
+
+class FeatureExtractor(six.with_metaclass(ABCMeta)):
     def __init__(self, ident, size, **kwargs):
         self._size = size
         self.ident = ident
@@ -245,7 +296,6 @@ class FeatureExtractor(object):
 
     def __len__(self):
         return self._size
-
 
     def __str__(self):
         return "%s feature" % self.ident
