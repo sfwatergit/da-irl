@@ -1,3 +1,4 @@
+# coding=utf-8
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
@@ -146,7 +147,7 @@ class TMDP(MDP):
                     Q[s_idx,a] = sum([o[0] * (r[s_idx][o[1].state_id] + V_prev[o[1].state_id])
                                          for o in actions[a].outcomes])
                 V = softmax(Q, temperature)
-            diff = np.amax(abs(V_prev - V))
+            diff = np.amax(np.abs(V_prev - V))
 
             i += 1
             print(diff)
@@ -155,6 +156,9 @@ class TMDP(MDP):
                 V = V.reshape((-1, 1))
                 expt = lambda x: np.exp(x / temperature)
                 policy = expt(Q - V)
+
+                # Stochastic policy... make sure that ∀ \sum_a p(a|s) == 1
+                assert np.allclose(policy.sum(1), np.ones(nS))
                 return policy, Q, V
 
     def _assign_pdf_abs(self, s_to, time_span, scale):
