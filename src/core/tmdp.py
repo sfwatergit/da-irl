@@ -98,12 +98,12 @@ class TMDP(MDP):
         self.action_types = action_types
         self._action_dict = dict((v, t) for v, t in enumerate(self.action_types))
         self._actions = None
-        self.state_types = state_types
+        self._state_types = state_types
         self._initial_state = initial_state
         self.horizon = horizon
         self.disc = discretization  # assumed in minutes for now
         self._tidx = int(self.horizon / self.disc)
-        self._states = np.zeros([len(self.state_types), self._tidx], dtype=object)
+        self._states = np.zeros([len(self._state_types), self._tidx], dtype=object)
         self._terminals = None
 
     def set_outcomes(self, outcomes):
@@ -199,7 +199,7 @@ def mk_Trans_mat(mdp):
     return P
 
 
-def initialize_mdp(mdp):
+def initialize_test_mdp(mdp):
     action_dict = mdp._action_dict
 
     ## A0|dawdling (all states):
@@ -315,7 +315,7 @@ def mk_ts(arr):
     return tuple(map(lambda x: t2n(x[0], x[1]), (arr[0], arr[1], arr[2])))
 
 
-def init_rewards(states):
+def init_test_rewards(states):
     dim_s = len(states)
     rewards = np.zeros([dim_s, dim_s], dtype=np.float32)
     for s_from in states:
@@ -339,10 +339,10 @@ if __name__ == '__main__':
     activity_types = ['Home', 'Work', 'x2']
     action_types = ['dawdling', 'commute_by_pt', 'driving to work via highway', 'driving on backroad']
 
-    mdp = TMDP(None, None, 1200, 10, 'home', activity_types,
+    mdp = TMDP(None, None, 1200, 5, 'home', activity_types,
                action_types)
-    initialize_mdp(mdp)
-    reward = init_rewards(mdp.S)
+    initialize_test_mdp(mdp)
+    reward = init_test_rewards(mdp.S)
     p,Q,V = mdp.approximate_value_iteration(reward)
     plt.plot(range(len(V)), V)
     plt.show()

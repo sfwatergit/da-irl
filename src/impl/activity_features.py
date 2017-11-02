@@ -4,8 +4,8 @@ from abc import abstractmethod
 import numpy as np
 from numpy import ndarray
 
-from src.core.mdp import FeatureExtractor
-from src.impl.activity_mdp import ActivityState, TravelState
+from src.core.mdp import FeatureExtractor, TransitionFunction
+from src.impl.activity_mdp import ActivityState, TravelState, ATPTransition, ATPAction
 
 
 class TripFeature(FeatureExtractor):
@@ -22,6 +22,12 @@ class TripFeature(FeatureExtractor):
         # type: (TravelState, ATPAction) -> ndarray
         raise NotImplementedError("Must implement __call__")
 
+    @property
+    def T(self):
+        if self._T is None:
+            self._T = ATPTransition(self.env)
+        return self._T
+
 
 class TravelTimeDisutilityFeature(TripFeature):
     def __init__(self, mode, params, **kwargs):
@@ -32,11 +38,11 @@ class TravelTimeDisutilityFeature(TripFeature):
     def __call__(self, state, action):
         if isinstance(state, ActivityState):
             return np.array([0])
-        mode_params = self.params.travel_params[state.mode]
-        if state.mode != self.ident:  # handle each mode separately
+        mode_params = self.params.travel_params[state.state_label]
+        if state.state_label != self.ident:  # handle each mode separately
             return np.zeros(1)
 
-        next_state = self.env.next_state(state, action)
+        next_state = self.T(state, action)
         stays = True
         if isinstance(next_state, ActivityState):  # transitioning to activity
             stays = False
@@ -85,12 +91,21 @@ class ActivityFeature(FeatureExtractor):
     Specialized `FeatureExtractor` for resolving features of `Activity` `TourElement`s.
     """
 
+
+
     def __init__(self, ident, size, activity_params, **kwargs):
         super(ActivityFeature, self).__init__(ident, size, **kwargs)
         self.params = activity_params
 
     def __call__(self, state, action):
         print state, action
+
+    @property
+    def T(self):
+        # type: () -> TransitionFunction
+        if self._T is None:
+            self._T = ATPTransition(self.env)
+        return self._T
 
 
 # class EarlyDepartureFeature(ActivityFeature):
@@ -171,7 +186,7 @@ class EarlyArrivalFeature(ActivityFeature):
         # type: (ActivityState, ATPAction) -> ndarray
         arrival_time, departure_time = state.time_index * state.segment_minutes, (
             state.time_index + 1) * state.segment_minutes
-        next_state = self.env.next_state(state, action)
+        next_state = self.T(state, action)
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -179,7 +194,7 @@ class EarlyArrivalFeature(ActivityFeature):
                 return np.array([0])
 
         arrival_time = next_state.time_index * next_state.segment_minutes
-        next_activity = next_state.activity_type
+        next_activity = next_state.state_label
         opening_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
 
         if 0 <= arrival_time < opening_time:  # arrived `segment_minutes` before open.
@@ -196,7 +211,7 @@ class LateArrivalFeature(ActivityFeature):
         super(LateArrivalFeature, self).__init__(ident, size, activity_params, **kwargs)
 
     def __call__(self, state, action):
-        next_state = self.env.next_state(state, action)
+        next_state = self.T(state, action)
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -204,7 +219,7 @@ class LateArrivalFeature(ActivityFeature):
                 return np.array([0])
 
         arrival_time = next_state.time_index * next_state.segment_minutes
-        next_activity = next_state.activity_type
+        next_activity = next_state.state_label
 
         latest_start_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
 
@@ -317,7 +332,7 @@ def create_act_at_x_features(where, when,interval_length, params):
         if arrival_time < self.start_period or departure_time > self.end_period:
             return np.array([0])
 
-        current_activity = state.activity_type
+        current_activity = state.state_label
         if current_activity != self.where:
             return np.array([0])
         activity_end = state.get_end_time

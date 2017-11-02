@@ -4,17 +4,16 @@ from __future__ import (
 
 import multiprocessing
 
+import gym
 import networkx as nx
 import numpy as np
 import pandas as pd
 from cytoolz import memoize
-from tqdm import tqdm
-
-import gym
 from gym.spaces.discrete import Discrete
 from gym.spaces.tuple_space import Tuple
+from tqdm import tqdm
 
-from src.impl.activity_mdp import ActivityState, ATPAction, TravelState, ATPState
+from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 from src.impl.population import ExpertTrajectoryData
 
 num_cores = multiprocessing.cpu_count()
@@ -80,14 +79,11 @@ class ActivityEnv(gym.Env):
             for t, step in enumerate(trajectory):
                 tup = (step, t)
                 if tup in self.G.node:
-                    state_ix = self.G.node[tup]['attr_dict']['state'].state_id
+                    state_ix = self.G.node[tup]['state'].state_id
                     if len(states) > 0:
                         prev_state = self.states[states[-1]]
                         state = self.states[state_ix]
-                        if isinstance(state, ActivityState):
-                            s_type = state.activity_type
-                        else:
-                            s_type = state.mode
+                        s_type = state.state_label
                         available_actions = [self.actions[act] for act in prev_state.available_actions
                                              if (s_type == self.actions[act].succ_ix)]
                         if len(available_actions) == 0:
@@ -97,12 +93,6 @@ class ActivityEnv(gym.Env):
                     states.append(state_ix)
             paths.append(np.array(zip(states, actions)))
         return np.array(paths)
-
-    def _tour_element_to_state(self, el_type, start_time):
-        pass
-
-    def _state_to_tour_element(self, s):
-        pass
 
     @staticmethod
     def _str_tmat_to_num_tmat(str_tmat, factors):
@@ -170,10 +160,10 @@ class ActivityEnv(gym.Env):
 
         # Add unique states
         term = False
-        for t in xrange(T):
+        for t in range(T):
             for s, el in enumerate(unique_elements):
                 edge = (el, t)
-                if t < T - 2:  # if it's not the last period, we can still make decisions
+                if t < T - 1:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
                     available_actions = [self.get_home_action_id()]
@@ -182,14 +172,16 @@ class ActivityEnv(gym.Env):
                     ns_el = self.actions[a].succ_ix
                     g.add_edge(edge, (ns_el, t + 1), attr_dict={'ix': a})
                 if el in self.activity_types:
-                    el_type = ActivityState(state_ix, t, self.segment_mins, el, edge)
+                    el_type = ActivityState(state_ix, el, t, self.segment_mins, edge)
                 elif el in self.travel_modes:
-                    el_type = TravelState(state_ix, t, self.segment_mins, el, edge)
+                    el_type = TravelState(state_ix, el, t, self.segment_mins, edge)
                 else:
                     raise ValueError("%s not Found!" % el)
                 if term:
-                    el_type = ActivityState(state_ix, t, self.segment_mins, self.home_act, edge)
+                    el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
+                    self.terminals.append(state_ix)
                     self.home_state = el_type
+                    g.add_edge(edge, (self.home_act, t), attr_dict={'ix': available_actions[0]})
                 el_type.available_actions.extend(available_actions)
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
@@ -207,18 +199,6 @@ class ActivityEnv(gym.Env):
         if self._transition_probability_matrix is None:
             self._transition_probability_matrix = nx.adjacency_matrix(self._g)
         return self._transition_probability_matrix
-
-    @memoize
-    def next_state(self, state, action):
-        data = [a for a in self.G.successors(state.edge) if a[0] == action.succ_ix]
-        if len(data) > 0:
-            ns = self.G.node[[data[0]][0]]
-            if len(ns) > 0:
-                return ns['attr_dict']['state']
-            else:
-                return self.home_state
-        else:
-            return ATPState(-1, -1, -1, 0)
 
     def get_home_action_id(self):
         assert self.actions is not None

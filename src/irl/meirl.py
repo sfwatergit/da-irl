@@ -54,7 +54,7 @@ class BaseMaxEntIRLAgent(IRLAgent):
                 actions = state.available_actions
                 for a_xy in actions:
                     action = self.mdp.env.actions[a_xy]
-                    next_state = self.mdp.env.next_state(state, action)
+                    next_state = self.mdp.T(state, action)
                     if next_state.state_id == -1:
                         continue
                     s_z = next_state.state_id
@@ -83,8 +83,7 @@ class BaseMaxEntIRLAgent(IRLAgent):
         V = np.nan_to_num(np.ones((nS, 1)) * float("-inf"))
 
         V_pot = V.copy()
-        for example in self._current_batch:
-            V_pot[example[-1][0]] = 0
+        V_pot[self.mdp.env.home_state.state_id] = 0.0
         diff = np.ones(nS)
         Q = np.nan_to_num(np.ones((nS, nA)) * float("-inf"))
         t = 0
@@ -96,9 +95,7 @@ class BaseMaxEntIRLAgent(IRLAgent):
                 actions = state.available_actions
                 for a_xy in actions:
                     action = self.mdp.env.actions[a_xy]
-                    next_state = self.mdp.env.next_state(state, action)
-                    if next_state.state_id == -1:
-                        continue
+                    next_state = self.mdp.T(state, action)
                     s_z = next_state.state_id
                     Q[s_x, a_xy] = V[s_z] + reward[s_x, a_xy]  # For deterministic MDPs only
                     Vp[s_x] = softmax(Vp[s_x][0], Q[s_x, a_xy])
@@ -116,13 +113,14 @@ class BaseMaxEntIRLAgent(IRLAgent):
         # compute policy from v and q
         for s_x in self.mdp.S:
             state = self.mdp.env.states[s_x]
-            actions = state.available_actions
+            actions = self.mdp.actions(state)
             for a_xy in actions:
                 policy[s_x, a_xy] = np.exp(Q[s_x, a_xy] - V[s_x])
 
         self._MAX_ITER = t
         if self.VERBOSE:
             print ('Computed policy in {:,.2f} seconds'.format(time.time() - start_time))
+        print(policy)
         return policy.astype(np.float32)
 
     def get_start_state_dist(self, paths):
@@ -209,7 +207,8 @@ def log_likelihood(pi, examples):
     ll = 0
     for example in examples:
         for s, a in example[:-1]:
-            ll += np.log(pi[s, a])
+            if pi[s,a] != 0:
+                ll += np.log(pi[s, a])
     return ll
 
 

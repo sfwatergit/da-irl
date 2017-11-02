@@ -67,15 +67,9 @@ class MDP(six.with_metaclass(ABCMeta)):
     def T(self, state, action):
         return self._transition(state, action)
 
-    @property
+    @abstractproperty
     def terminals(self):
-        return self._terminals
-
-    def initial_state_distribution(self):
-        """
-        Return the initial state distribution of the MDP.
-        """
-        raise NotImplementedError
+        raise NotImplementedError('Not implemented: terminals')
 
 
 class TransitionFunction(six.with_metaclass(ABCMeta)):
@@ -107,7 +101,7 @@ class TransitionFunction(six.with_metaclass(ABCMeta)):
     def __init__(self, env=None):
         self.env = env
 
-    def __call__(seZlf, state, action, **kwargs):
+    def __call__(self, state, action, **kwargs):
         """ Execute the transition function
 
          Run the controller at `state` using `action` with optional parameters
@@ -278,10 +272,15 @@ class FeatureExtractor(six.with_metaclass(ABCMeta)):
     def __init__(self, ident, size, **kwargs):
         self._size = size
         self.ident = ident
+        self._T = None
         if 'env' in kwargs:
             self.env = kwargs.pop('env')
         else:
             self.env = None
+
+    @abstractproperty
+    def T(self):
+        raise NotImplementedError
 
     @property
     def size(self):
