@@ -64,9 +64,7 @@ def main():
         data = json.load(fp)
         params = MATSimParameters(data)
 
-    cache_dir = '../{}/output/joblib/cache/{}'.format(
-        os.path.dirname(os.path.realpath(__file__)),
-        params.general_params['runId'])
+    cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),params.general_params['runId'])
     create_dir_if_not_exists(cache_dir)
     env = ActivityEnv(params, cache_dir)
     R = ActivityRewardFunction(params, env)

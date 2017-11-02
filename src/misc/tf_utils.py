@@ -1,5 +1,5 @@
 import tensorflow as tf
-import numpy as np
+
 
 
 def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
