@@ -64,7 +64,7 @@ def main():
         data = json.load(fp)
         params = MATSimParameters(data)
 
-    cache_dir = '{}/output/joblib/cache/{}'.format(
+    cache_dir = '../{}/output/joblib/cache/{}'.format(
         os.path.dirname(os.path.realpath(__file__)),
         params.general_params['runId'])
     create_dir_if_not_exists(cache_dir)
