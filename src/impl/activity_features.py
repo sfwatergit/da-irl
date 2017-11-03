@@ -1,3 +1,4 @@
+from __future__ import print_function
 import re
 from abc import abstractmethod
 
@@ -98,7 +99,7 @@ class ActivityFeature(FeatureExtractor):
         self.params = activity_params
 
     def __call__(self, state, action):
-        print state, action
+        print(state, action)
 
     @property
     def T(self):
@@ -186,7 +187,7 @@ class EarlyArrivalFeature(ActivityFeature):
         # type: (ActivityState, ATPAction) -> ndarray
         arrival_time, departure_time = state.time_index * state.segment_minutes, (
             state.time_index + 1) * state.segment_minutes
-        next_state = self.T(state, action)
+        next_state = self.T(state, action)[0]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):

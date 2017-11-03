@@ -84,11 +84,12 @@ class ATPTransition(TransitionFunction):
         if len(data) > 0:
             ns = self.env.G.node[data[0]]
             if len(ns) > 0:
-                return ns['attr_dict']['state']
+                return np.array([(1.0, ns['attr_dict']['state'])])
             else:
-                return self.env.home_state
+                return np.array([(1.0, self.env.home_state)])
         else:
-            return ATPState(-1, -1, -1, 0)
+            raise ValueError('No resulting state or')
+
 
 
 class ActivityMDP(MDP):

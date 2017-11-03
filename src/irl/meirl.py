@@ -95,9 +95,8 @@ class BaseMaxEntIRLAgent(IRLAgent):
                 actions = state.available_actions
                 for a_xy in actions:
                     action = self.mdp.env.actions[a_xy]
-                    next_state = self.mdp.T(state, action)
-                    s_z = next_state.state_id
-                    Q[s_x, a_xy] = V[s_z] + reward[s_x, a_xy]  # For deterministic MDPs only
+                    outcomes = self.mdp.T(state, action)
+                    Q[s_x, a_xy] = np.sum([o[0]*(V[o[1].state_id] + reward[s_x, a_xy]) for o in outcomes])
                     Vp[s_x] = softmax(Vp[s_x][0], Q[s_x, a_xy])
             diff = np.abs(V - Vp).max()
             V = Vp.copy()
@@ -108,20 +107,30 @@ class BaseMaxEntIRLAgent(IRLAgent):
                     print('t:{}, Delta V:{}, No. divergent states: {}'.format(t, diff, num_neg_infs))
             t += 1
 
-        policy = np.zeros_like(Q)
-
-        # compute policy from v and q
-        for s_x in self.mdp.S:
-            state = self.mdp.env.states[s_x]
-            actions = self.mdp.actions(state)
-            for a_xy in actions:
-                policy[s_x, a_xy] = np.exp(Q[s_x, a_xy] - V[s_x])
+        policy = self.compute_policy(Q, V)
 
         self._MAX_ITER = t
         if self.VERBOSE:
             print ('Computed policy in {:,.2f} seconds'.format(time.time() - start_time))
         print(policy)
         return policy.astype(np.float32)
+
+    def compute_policy(self, Q, V):
+        # type: (np.ndarray, np.ndarray) -> np.ndarray
+        """Compute policy from Q and V as pi
+        Args:
+            param Q (np.ndarray): State-action value function
+            param V (np.ndarray):
+        Return:
+            (np.ndarray) stochastic policy
+        """
+        policy = np.zeros_like(Q)
+        for s_x in self.mdp.S:
+            state = self.mdp.env.states[s_x]
+            actions = self.mdp.actions(state)
+            for a_xy in actions:
+                policy[s_x, a_xy] = np.exp(Q[s_x, a_xy] - V[s_x])
+        return policy
 
     def get_start_state_dist(self, paths):
         path_states = np.array([path[0] for path in paths])
