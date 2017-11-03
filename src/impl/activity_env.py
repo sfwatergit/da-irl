@@ -79,7 +79,7 @@ class ActivityEnv(gym.Env):
             for t, step in enumerate(trajectory):
                 tup = (step, t)
                 if tup in self.G.node:
-                    state_ix = self.G.node[tup]['state'].state_id
+                    state_ix = self.G.node[tup]['attr_dict']['state'].state_id
                     if len(states) > 0:
                         prev_state = self.states[states[-1]]
                         state = self.states[state_ix]
@@ -104,7 +104,6 @@ class ActivityEnv(gym.Env):
             tmat[i] = r.values
         return tmat
 
-    @memoize
     def get_legal_actions_for_state(self, el):
         """
         If in an activity state, the agent can either stay in the activity or transition to a travel state
@@ -186,7 +185,6 @@ class ActivityEnv(gym.Env):
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
                 state_ix += 1
-
         self._g = g
 
         t2p = self._trajectories_to_paths

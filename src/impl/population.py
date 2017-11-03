@@ -1,8 +1,6 @@
-
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
-
 
 import operator
 import os.path
@@ -15,9 +13,9 @@ from tqdm import tqdm
 
 from src.impl.tour import ActivityEpisode, Segment
 
-DAY_SECS = 86400
-NUM_HRS_AT_END = 30
-END_CONSTRAINT = NUM_HRS_AT_END * 60 * 60
+DAY_SECS = 86399
+NUM_HRS_AT_END = 24
+END_CONSTRAINT = NUM_HRS_AT_END * 60 * 60-1
 
 
 class Person(object):
@@ -61,7 +59,7 @@ class ExpertTrajectoryData(object):
         for seq in pbar:
             max_time = max([el.end_time for el in seq])
             min_duration = min([el.duration for el in seq])
-            if max_time < END_CONSTRAINT and min_duration >= 0:
+            if max_time <= END_CONSTRAINT and min_duration >= 0:
                 trajectories.append(segment_sequence(seq, self._seg_minutes))
             else:
                 discarded += 1
@@ -92,15 +90,18 @@ class ExpertTrajectoryData(object):
         return [person for person in self._pop if int(person.pid) in cond_list]
 
     def _traj_to_mat(self, trajectories):
-        max_len = max([len(a) for a in trajectories])
-
-        for trajectory in trajectories:
+        max_len = max([len(a) for a in trajectories])-1
+        nT = len(trajectories)
+        t_arr =np.zeros([nT,max_len],dtype='S16')
+        for t_idx, trajectory in enumerate(trajectories):
             s_len = len(trajectory)
-            if s_len < max_len:
+            if s_len <= max_len:
                 delta = max_len - s_len
                 trajectory.extend([trajectory[-1]] * delta)
-        seq_arr = np.array(trajectories).T
-        return seq_arr
+            else:
+                trajectory = trajectory[:-1]
+            t_arr[t_idx] = np.array(trajectory)
+        return t_arr.T
 
     @property
     def tmat(self):
@@ -180,7 +181,7 @@ class PopulationParser(object):
             end_time = start_time
         elif is_last_activity_of_day:
             if start_time < DAY_SECS:  # before end of 'normal day'
-                end_time = DAY_SECS - 1
+                end_time = DAY_SECS
             else:
                 end_time = END_CONSTRAINT  # 32 hr
         else:

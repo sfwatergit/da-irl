@@ -1,3 +1,5 @@
+import glob
+
 from enum import Enum
 import pandas as pd
 
@@ -70,5 +72,13 @@ class TraceLoader(object):
         Returns:
             (pd.DataFrame) Dataframe of traces.
         """
-        data_frame = pd.read_csv(csv_file)
+        if csv_file.endswith('.csv'):
+            data_frame = pd.read_csv(csv_file)
+        else:
+            csvs = glob.glob(csv_file + "/*.csv")
+            dfs = []
+            for csv in csvs:
+                df = pd.read_csv(csv)
+                dfs.append(df)
+            data_frame = pd.concat(dfs)
         return TraceLoader.load_traces_from_df(data_frame, **kwargs)

@@ -83,12 +83,12 @@ class BaseMaxEntIRLAgent(IRLAgent):
         V = np.nan_to_num(np.ones((nS, 1)) * float("-inf"))
 
         V_pot = V.copy()
-        V_pot[self.mdp.env.home_state.state_id] = 0.0
+        V_pot[self.mdp.env.terminals] = 0.0
         diff = np.ones(nS)
         Q = np.nan_to_num(np.ones((nS, nA)) * float("-inf"))
         t = 0
 
-        while (diff > 1e-4).all():
+        while (diff > 1e-2).all():
             Vp = V_pot.copy()
             for s_x in reversed(self.mdp.S):
                 state = self.mdp.env.states[s_x]

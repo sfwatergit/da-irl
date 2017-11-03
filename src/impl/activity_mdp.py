@@ -58,7 +58,7 @@ class TravelState(ATPState):
         super(TravelState, self).__init__(state_id, mode, time_index, segment_minutes, edge)
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label, self.time_index)
+        return '{}:[{}, {}]'.format(self.state_id, self.state_label, make_time_string(self.time_index*self.segment_minutes))
 
     def __repr__(self):
         return self.__str__()
@@ -69,7 +69,7 @@ class ActivityState(ATPState):
         super(ActivityState, self).__init__(state_id, activity_type, time_index, segment_minutes, edge)
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label, self.time_index)
+        return '{}:[{}, {}]'.format(self.state_id, self.state_label, make_time_string(self.time_index*self.segment_minutes))
 
     def __repr__(self):
         return self.__str__()
@@ -84,7 +84,7 @@ class ATPTransition(TransitionFunction):
         if len(data) > 0:
             ns = self.env.G.node[data[0]]
             if len(ns) > 0:
-                return ns['state']
+                return ns['attr_dict']['state']
             else:
                 return self.env.home_state
         else:
