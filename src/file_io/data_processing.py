@@ -23,9 +23,6 @@ SUN = 6
 
 
 class User:
-    """
-
-    """
     def __init__(self, records_path):
         self._records_path = records_path
         self._records = None
@@ -69,9 +66,9 @@ class User:
     def _filter_home(self, tup):
         enter_day, enter_hr, exit_day, exit_hr = tup
         is_same_day = (enter_day == exit_day)
-        is_morning_hour = (exit_day <= self.early_morning_hr)
+        is_morning_hour = (exit_hr <= self.early_morning_hr)
         is_consecutive_day = (((enter_day == SUN) & (exit_day == MON)) | (enter_day + 1 == exit_day))
-        is_late_night = ((enter_hr >= self.late_night_hr) & (exit_hr <= self.early_morning_hr))
+        is_late_night = ((enter_hr >= self.late_night_hr) & is_morning_hour)
         cond_1 = (is_consecutive_day & is_late_night)
         cond_2 = (is_same_day & is_morning_hour)
         return cond_1 | cond_2

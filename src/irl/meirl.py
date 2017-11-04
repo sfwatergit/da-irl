@@ -10,7 +10,6 @@ from cytoolz import memoize
 
 from src.core.agent import IRLAgent
 from src.misc.math_utils import adam
-from scipy.special import logsumexp
 
 INF = np.nan_to_num([1 * float("-inf")])
 
@@ -59,9 +58,9 @@ class BaseMaxEntIRLAgent(IRLAgent):
                     for o in outcomes:
                         s_z = o[1].state_id
                         p = o[0]
-                        expected_svf[s_z, t] += p*(expected_svf[s_x, t - 1] *
-                                             policy[s_x, a_xy])
-        print ('Computed svf in {:,.2f} seconds'.format(time.time() - start_time))
+                        expected_svf[s_z, t] += p * (expected_svf[s_x, t - 1] *
+                                                     policy[s_x, a_xy])
+        print('Computed svf in {:,.2f} seconds'.format(time.time() - start_time))
         return np.sum(expected_svf, 1).astype(np.float32).reshape(self.nS, 1)
 
     def approximate_value_iteration(self, reward):
@@ -97,7 +96,7 @@ class BaseMaxEntIRLAgent(IRLAgent):
                 for a_xy in actions:
                     action = self.mdp.env.actions[a_xy]
                     outcomes = self.mdp.T(state, action)
-                    Q[s_x, a_xy] = np.sum([o[0]*(V[o[1].state_id] + reward[s_x, a_xy]) for o in outcomes])
+                    Q[s_x, a_xy] = np.sum([o[0] * (V[o[1].state_id] + reward[s_x, a_xy]) for o in outcomes])
                     Vp[s_x] = softmax(Vp[s_x][0], Q[s_x, a_xy])
             diff = np.abs(V - Vp).max()
             V = Vp.copy()
@@ -112,7 +111,7 @@ class BaseMaxEntIRLAgent(IRLAgent):
 
         self._MAX_ITER = t
         if self.VERBOSE:
-            print ('Computed policy in {:,.2f} seconds'.format(time.time() - start_time))
+            print('Computed policy in {:,.2f} seconds'.format(time.time() - start_time))
         print(policy)
         return policy.astype(np.float32)
 
@@ -194,13 +193,13 @@ class MaxEntIRLAgent(BaseMaxEntIRLAgent):
                 self.log_lik_hist.append(log_lik)
 
                 if self.VERBOSE:
-                    print ("Gradient (feature diff): {}".format(avg_feature_diff))
-                    print ("Negative Log Likelihood: {}".format(-log_lik))
+                    print("Gradient (feature diff): {}".format(avg_feature_diff))
+                    print("Negative Log Likelihood: {}".format(-log_lik))
 
                 theta, config = adam(theta, df_dtheta.T, config)
 
                 if self.VERBOSE:
-                    print (theta)
+                    print(theta)
 
                 self.mdp.reward.update_reward(theta)
 
@@ -217,7 +216,7 @@ def log_likelihood(pi, examples):
     ll = 0
     for example in examples:
         for s, a in example[:-1]:
-            if pi[s,a] != 0:
+            if pi[s, a] != 0:
                 ll += np.log(pi[s, a])
     return ll
 
@@ -245,4 +244,3 @@ def group_by_iter(n, iterable):
     while row:
         yield row
         row = tuple(next(iterable) for i in range(n))
-
