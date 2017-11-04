@@ -10,6 +10,7 @@ from cytoolz import memoize
 
 from src.core.agent import IRLAgent
 from src.misc.math_utils import adam
+from scipy.special import logsumexp
 
 INF = np.nan_to_num([1 * float("-inf")])
 
@@ -54,11 +55,11 @@ class BaseMaxEntIRLAgent(IRLAgent):
                 actions = state.available_actions
                 for a_xy in actions:
                     action = self.mdp.env.actions[a_xy]
-                    next_state = self.mdp.T(state, action)
-                    if next_state.state_id == -1:
-                        continue
-                    s_z = next_state.state_id
-                    expected_svf[s_z, t] += (expected_svf[s_x, t - 1] *
+                    outcomes = self.mdp.T(state, action)
+                    for o in outcomes:
+                        s_z = o[1].state_id
+                        p = o[0]
+                        expected_svf[s_z, t] += p*(expected_svf[s_x, t - 1] *
                                              policy[s_x, a_xy])
         print ('Computed svf in {:,.2f} seconds'.format(time.time() - start_time))
         return np.sum(expected_svf, 1).astype(np.float32).reshape(self.nS, 1)
@@ -244,3 +245,4 @@ def group_by_iter(n, iterable):
     while row:
         yield row
         row = tuple(next(iterable) for i in range(n))
+
