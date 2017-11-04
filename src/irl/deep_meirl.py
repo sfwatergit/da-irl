@@ -5,7 +5,7 @@ from __future__ import (
 import matplotlib
 
 from src.irl.meirl import MaxEntIRLAgent
-from src.misc.utils import normalize
+from src.misc.math_utils import normalize
 
 matplotlib.use("Agg")
 import numpy as np

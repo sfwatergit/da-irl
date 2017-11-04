@@ -1,7 +1,7 @@
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
 from src.misc import tf_utils
-from src.misc.utils import get_subclass_list, cartesian
+from src.misc.math_utils import get_subclass_list, cartesian
 import tensorflow as tf
 import numpy as np
 

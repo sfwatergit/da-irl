@@ -3,7 +3,7 @@ from src.impl.activity_mdp import ATPTransition, ActivityMDP
 from src.impl.activity_params import MATSimParameters
 from src.impl.activity_rewards import ActivityRewardFunction
 from src.irl.meirl import MaxEntIRLAgent
-from src.misc.utils import create_dir_if_not_exists
+from src.misc.math_utils import create_dir_if_not_exists
 
 # import matplotlib.pyplot as plt
 import numpy as np

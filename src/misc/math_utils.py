@@ -1,12 +1,12 @@
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
-
-import functools
 import inspect
 from os import path, makedirs
+import math
 
 import numpy as np
+import functools
 
 FNOPTS = dict(allow_input_downcast=True, on_unused_input='ignore')
 
@@ -23,6 +23,37 @@ def to_onehot_n(inds, dim):
     return ret
 
 
+def great_circle_distance(pt1, pt2):
+    """
+    Return the great-circle distance in kilometers between two points,
+    defined by a tuple (lat, lon).
+    Examples
+    --------
+    >>> brussels = (50.8503, 4.3517)
+    >>> paris = (48.8566, 2.3522)
+    >>> great_circle_distance(brussels, paris)
+    263.9754164080347
+    """
+    r = 6371.
+
+    delta_latitude = math.radians(pt1[0] - pt2[0])
+    delta_longitude = math.radians(pt1[1] - pt2[1])
+    latitude1 = math.radians(pt1[0])
+    latitude2 = math.radians(pt2[0])
+
+    a = math.sin(delta_latitude / 2) ** 2 + math.cos(latitude1) * math.cos(latitude2) * math.sin(delta_longitude / 2) ** 2
+    return r * 2. * math.asin(math.sqrt(a))
+
+def compute_distance_matrix(points):
+    """
+    Return a matrix of distance (in meters) between every point in a given list
+    of (lat, lon) location tuples.
+    """
+    n = len(points)
+    return [[1000 * great_circle_distance(points[i], points[j])
+             for j in range(n)] for i in range(n)]
+
+
 def make_time_string(mm):
     # type: (int) -> unicode
     """
@@ -35,7 +66,6 @@ def make_time_string(mm):
     mm_str = str(mm % 60).zfill(2)
     hh_str = str(mm // 60).zfill(2)
     return "{}:{}".format(hh_str, mm_str)
-
 
 def t2n(hh, mm):
     return hh * 60 + mm

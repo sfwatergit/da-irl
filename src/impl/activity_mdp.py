@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
-from src.misc.utils import make_time_string
+from src.misc.math_utils import make_time_string
 
 
 class ATPState(State):

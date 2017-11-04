@@ -9,7 +9,7 @@ import numpy as np
 from cytoolz import memoize
 
 from src.core.agent import IRLAgent
-from src.misc.utils import adam
+from src.misc.math_utils import adam
 
 INF = np.nan_to_num([1 * float("-inf")])
 
