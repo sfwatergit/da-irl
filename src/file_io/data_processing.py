@@ -3,15 +3,8 @@ from __future__ import (
 )
 
 import numpy as np
-# Vendor
-import shapely
-
-# Local
 from src.file_io.trace_loader import TraceLoader
 
-# Default
-
-shapely.speedups.enable()
 
 # BBOX:
 LAT_MIN = 32.831
@@ -134,5 +127,7 @@ def great_circle_distance(pt1, pt2):
 
 if __name__ == '__main__':
     # Path
-    PATH = '/Users/sfeygin/PycharmProjects/da-irl/data/traces'
+    import sys
+    PATH = sys.argv[1]
     u = User(PATH)._records
+    print(u)
