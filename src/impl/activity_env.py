@@ -136,7 +136,8 @@ class ActivityEnv(gym.Env):
         """
 
         data = self.trajectory_data
-        tmat = data.tmat  # SxT matrix
+        # tmat = data.tmat  # SxT matrix
+        tmat=np.load('/Users/sfeygin/current_code/python/da-irl/data/traces/trajectories/p1.npy').T
         els = pd.factorize(np.unique(tmat))
         unique_elements = els[1]
         num_states = len(unique_elements)

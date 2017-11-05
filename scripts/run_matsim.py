@@ -80,7 +80,7 @@ def main():
 
     learning_agent.learn_rewards_and_weights(num_iters,
                                              learning_rate=0.03,
-                                             minibatch_size=len(expert_paths) / 3,
+                                             minibatch_size=len(expert_paths),
                                              initial_theta=theta_prior,
                                              cache_dir=cache_dir)
 

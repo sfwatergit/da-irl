@@ -46,9 +46,9 @@
       "closingTime": "20:00:00",
       "earliestEndTime": "undefined",
       "latestStartTime": "undefined",
-      "minimalDuration": "00:20:00",
-      "openingTime": "08:00:00",
-      "typicalDuration": "00:40:00",
+      "minimalDuration": "undefined",
+      "openingTime": "undefined",
+      "typicalDuration": "undefined",
       "type":"shopping"
 
     },

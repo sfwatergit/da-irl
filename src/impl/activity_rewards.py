@@ -16,8 +16,8 @@ class ActivityRewardFunction(RewardFunction):
 
     def __init__(self, params, env):
         self.activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
-        acts = [env.home_act, env.work_act, env.other_act]
-        time_range = np.arange(0, 1800, 15)
+        acts = [env.home_act, env.work_act, env.shopping_act]
+        time_range = np.arange(0, 1440, 15)
         prod = cartesian([acts, time_range])
         act_at_x_features = [create_act_at_x_features(where, when, 15, params)(env=env) for where, when in prod]
         self.activity_features.extend(act_at_x_features)
@@ -88,7 +88,7 @@ class ActivityNNReward(RewardFunction):
 
         self.activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
         acts = [env.home_act, env.work_act, env.other_act]
-        time_range = np.arange(0, 1800, 15)
+        time_range = np.arange(0, 1440, 15)
         prod = cartesian([acts, time_range])
         act_at_x_features = [create_act_at_x_features(where, when, 15, params)(env=env) for where, when in prod]
         self.activity_features.extend(act_at_x_features)
