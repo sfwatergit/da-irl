@@ -1,14 +1,14 @@
-from src.impl.activity_env import ActivityEnv
-from src.impl.activity_mdp import ATPTransition, ActivityMDP
-from src.impl.activity_params import MATSimParameters
-from src.impl.activity_rewards import ActivityRewardFunction
-from src.irl.meirl import MaxEntIRLAgent
-from src.misc.math_utils import create_dir_if_not_exists
+import os
 
 # import matplotlib.pyplot as plt
 import numpy as np
 
-import os
+from src.file_io.activity_params import ATPParameters
+from src.impl.activity_env import ActivityEnv
+from src.impl.activity_mdp import ATPTransition, ActivityMDP
+from src.impl.activity_rewards import ActivityRewardFunction
+from src.irl.meirl import MaxEntIRLAgent
+from src.misc.math_utils import create_dir_if_not_exists
 
 # plt.style.use('ggplot')
 
@@ -62,7 +62,7 @@ def save_run_data(params, feature_names, feature_diff, nll=None, plot=True):
 def main():
     with open(FLAGS.config) as fp:
         data = json.load(fp)
-        params = MATSimParameters(data)
+        params = ATPParameters(data)
 
     cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),params.general_params['runId'])
     create_dir_if_not_exists(cache_dir)

@@ -107,7 +107,7 @@ class TMDP(MDP):
         self._terminals = None
 
     def set_outcomes(self, outcomes):
-        raise NotImplementedError
+        self._outcomes = outcomes
 
     @property
     def initial_state(self):

@@ -1,4 +1,4 @@
-from src.misc.parameters import Parameters
+from src.file_io.parameters import Parameters
 
 
 class IRLParams(Parameters):
@@ -20,7 +20,7 @@ class FilterParams(Parameters):
         assert self.dir in ['gt', 'lt']
 
 
-class MATSimParameters(Parameters):
+class ATPParameters(Parameters):
     def __init__(self, data):
         self.general_params = data.pop('generalParams')
 

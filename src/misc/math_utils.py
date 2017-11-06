@@ -2,6 +2,7 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 import inspect
+from itertools import tee, izip
 from os import path, makedirs
 import math
 
@@ -184,6 +185,11 @@ def mellowmax(x, t=1):
     sm = softmax(x, t=t)
     return sm - t * np.log(x.shape[1])
 
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    now, nxt = tee(iterable)
+    next(nxt, None)
+    return izip(now, nxt)
 
 def adam(x, dx, config=None):
     """
