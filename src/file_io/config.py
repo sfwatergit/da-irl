@@ -2,7 +2,7 @@ import json
 from collections import Mapping, MutableSequence
 
 
-class Parameters(object):
+class Config(object):
     def load(self, json_file):
         """ Load parameters from a json file """
         with open(json_file, 'r') as f:
@@ -51,4 +51,4 @@ if __name__ == '__main__':
 
     with open(JSON) as fp:
         data = FrozenJSON(json.load(fp))
-        print data
+        print(data)

@@ -1,6 +1,7 @@
 # From https://github.com/openai/baselines/blob/master/baselines/common/dataset.py
 import numpy as np
 
+
 class Dataset(object):
     def __init__(self, data_map, deterministic=False, shuffle=True):
         self.data_map = data_map

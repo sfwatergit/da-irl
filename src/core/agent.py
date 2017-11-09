@@ -2,9 +2,15 @@ import numpy as np
 
 
 class IRLAgent(object):
-    def __init__(self, mdp,
-                 expert_demos=None, reward_prior=None, policy_prior=None):
+    def __init__(self, mdp, person=None, reward_prior=None, policy_prior=None):
+        """
 
+        Args:
+            mdp  (core.mdp.MDP): the mdp describing the agent's dynamics
+            person (core.population_data.Person):
+            reward_prior (np.array):
+            policy_prior (np.array):
+        """
         self.mdp = mdp
         self.nS = len(self.mdp.S)
         self.nA = len(self.mdp.A)
@@ -13,7 +19,7 @@ class IRLAgent(object):
         self.policy = policy_prior
         self.reward = reward_prior
 
-        self.expert_demos = expert_demos
+        self.expert_demos = person.trajectories
         self._current_batch = None
         self._dim_ss = mdp.reward.dim_ss
         self._total_num_paths = sum(len(path) for path in self.expert_demos)
@@ -70,19 +76,19 @@ class IRLAgent(object):
     def learn_rewards_and_weights(self):
         pass
 
-    def get_action(self, s):
+    def get_action(self, s_t):
         """
-        Act according to policy:
+        Act according to (stochastic) policy:
 
         .. math::
-            a_t ~ p( A_t | S_t = s )
+            a_t ~ p( A_t | S_t = s_t )
 
         Should sample from the current policy (or policy prior if policy is not yet initialized).
 
-        :param s: state at which to sample policy
+        :param s_t: state at which to sample policy
         :return: action
         """
-        return self.mdp.get_available_actions(s)
+        return self.policy[np.random.choice(self.mdp.actions(s_t), replace=False)]
 
     def get_reward(self):
         return self.mdp.reward

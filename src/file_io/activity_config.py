@@ -1,7 +1,7 @@
-from src.file_io.parameters import Parameters
+from src.file_io.config import Config
 
 
-class IRLParams(Parameters):
+class IRLConfig(Config):
     def __init__(self, data):
         self.segment_minutes = data.pop('segment_minutes', 15)
         self.plans_file_url = data.pop('plans_file_url', None)
@@ -10,7 +10,7 @@ class IRLParams(Parameters):
         self.energy_level_bins = data.pop('energy_level_bins', 3)
 
 
-class FilterParams(Parameters):
+class FilterConfig(Config):
     def __init__(self, data):
         self.kind = data.pop('kind', 'dur')
         assert self.kind in ['dur', 'dist']
@@ -20,13 +20,13 @@ class FilterParams(Parameters):
         assert self.dir in ['gt', 'lt']
 
 
-class ATPParameters(Parameters):
+class ATPConfig(Config):
     def __init__(self, data):
         self.general_params = data.pop('generalParams')
 
-        self.irl_params = IRLParams(data.pop('irlParams'))
+        self.irl_params = IRLConfig(data.pop('irlParams'))
 
-        self.filter_params = FilterParams(data.pop('filterParams'))
+        self.filter_params = FilterConfig(data.pop('filterParams'))
 
         self.activity_params = {
             'performing': data.pop('performing', 6.0),

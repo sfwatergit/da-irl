@@ -24,7 +24,7 @@
   "waiting": -0.0,
   "waitingPt": -3.0,
   "activityParams": {
-    "h": {
+    "H": {
       "closingTime": "undefined",
       "earliestEndTime": "undefined",
       "latestStartTime": "undefined",
@@ -33,7 +33,7 @@
       "typicalDuration": "12:00:00",
       "type":"home"
     },
-    "w": {
+    "W": {
       "closingTime": "18:00:00",
       "earliestEndTime": "undefined",
       "latestStartTime": "09:00:00",
@@ -42,12 +42,21 @@
       "typicalDuration": "08:00:00",
       "type":"work"
     },
-    "s": {
-      "closingTime": "20:00:00",
+        "w": {
+      "closingTime": "18:00:00",
+      "earliestEndTime": "undefined",
+      "latestStartTime": "09:00:00",
+      "minimalDuration": "06:00:00",
+      "openingTime": "07:00:00",
+      "typicalDuration": "08:00:00",
+      "type":"secondary_work"
+    },
+    "o": {
+      "closingTime": "undefined",
       "earliestEndTime": "undefined",
       "latestStartTime": "undefined",
       "minimalDuration": "undefined",
-      "openingTime": "undefined",
+      "openingTime": "07:00:00",
       "typicalDuration": "undefined",
       "type":"shopping"
 

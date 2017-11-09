@@ -25,7 +25,7 @@
   "waiting": -0.0,
   "waitingPt": -3.0,
   "activityParams": {
-    "h1": {
+    "h": {
       "closingTime": "undefined",
       "earliestEndTime": "undefined",
       "latestStartTime": "undefined",
@@ -34,7 +34,7 @@
       "typicalDuration": "12:00:00",
       "type":"home"
     },
-    "w1": {
+    "w": {
       "closingTime": "18:00:00",
       "earliestEndTime": "undefined",
       "latestStartTime": "09:00:00",
@@ -43,7 +43,7 @@
       "typicalDuration": "08:00:00",
       "type":"work"
     },
-    "s": {
+    "o": {
       "closingTime": "20:00:00",
       "earliestEndTime": "undefined",
       "latestStartTime": "undefined",
