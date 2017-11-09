@@ -1,4 +1,4 @@
-from core.population_data import Person
+from src.core.population_data import Person
 from swlcommon import Persona
 
 
@@ -23,6 +23,3 @@ class PersonaAgent(Person):
 
     def _compute_trajectories(self):
         self.persona.get_profile_as_array()
-
-
-
