@@ -8,7 +8,7 @@
   },
   "irlParams": {
     "segment_minutes": 15,
-    "plans_file_url": "/n/caltrans/matsim/smartbay/output/sf_bay/ampm_gt/ITERS/it.0/ampm_gt.0.plans.xml",
+    "traces_file_path": "/n/caltrans/matsim/smartbay/output/sf_bay/ampm_gt/ITERS/it.0/ampm_gt.0.plans.xml",
     "pop_limit": 50000,
     "num_iters": 500
   },

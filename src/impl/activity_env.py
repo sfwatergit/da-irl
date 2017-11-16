@@ -14,13 +14,12 @@ from gym.spaces.tuple_space import Tuple
 from tqdm import tqdm
 
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
-from src.impl.population import ExpertTrajectoryData
 
 num_cores = multiprocessing.cpu_count()
 
 
 class ActivityEnv(gym.Env):
-    def __init__(self, params, cache_dir=None):
+    def __init__(self, params, demos, cache_dir=None):
         self.irl_params = params.irl_params
         self.segment_mins = self.irl_params.segment_minutes
         self.cache_dir = cache_dir
@@ -28,10 +27,6 @@ class ActivityEnv(gym.Env):
         self.work_act = params.work_act
         self.shopping_act = params.shopping_act
         self.other_act = params.other_act
-
-        self.trajectory_data = ExpertTrajectoryData(self.irl_params.plans_file_url, self.segment_mins,
-                                                    self.irl_params.pop_limit, cache_dir, params.filter_params,
-                                                    self.work_act)
 
         self.activity_types = params.activity_params.keys()
         self.travel_modes = params.travel_params.keys()
@@ -42,7 +37,6 @@ class ActivityEnv(gym.Env):
         self._transition_probability_matrix = None
         self._g = None
         self.paths = None
-        self._build_state_graph()
 
     @property
     def G(self):
@@ -127,7 +121,7 @@ class ActivityEnv(gym.Env):
             raise ValueError("%s not Found!" % el)
         return q
 
-    def _build_state_graph(self):
+    def build_state_graph(self, expert_demos):
         """
         Builds the mdp state graph from the travel plans
 
@@ -135,9 +129,9 @@ class ActivityEnv(gym.Env):
             The state graph
         """
 
-        data = self.trajectory_data
+        data = expert_demos
         # tmat = data.tmat  # SxT matrix
-        tmat = np.load('/home/sfeygin/python/da-irl/notebooks/personas/persona_f76a429cf07eca1bd09f2fcef36cc21e161f1e82d24bf53ec098f9b55b6f3344.npy').T
+        tmat = data.T
         els = pd.factorize(np.unique(tmat))
         unique_elements = els[1]
         num_states = len(unique_elements)

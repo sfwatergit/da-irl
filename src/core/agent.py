@@ -2,12 +2,11 @@ import numpy as np
 
 
 class IRLAgent(object):
-    def __init__(self, mdp, person=None, reward_prior=None, policy_prior=None):
+    def __init__(self, mdp, data, reward_prior=None, policy_prior=None):
         """
 
         Args:
             mdp  (core.mdp.MDP): the mdp describing the agent's dynamics
-            person (core.population_data.Person):
             reward_prior (np.array):
             policy_prior (np.array):
         """
@@ -19,7 +18,7 @@ class IRLAgent(object):
         self.policy = policy_prior
         self.reward = reward_prior
 
-        self.expert_demos = person.trajectories
+        self.expert_demos = data
         self._current_batch = None
         self._dim_ss = mdp.reward.dim_ss
         self._total_num_paths = sum(len(path) for path in self.expert_demos)

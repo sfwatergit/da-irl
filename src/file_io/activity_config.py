@@ -4,20 +4,10 @@ from src.file_io.config import Config
 class IRLConfig(Config):
     def __init__(self, data):
         self.segment_minutes = data.pop('segment_minutes', 15)
-        self.plans_file_url = data.pop('plans_file_url', None)
-        self.pop_limit = data.pop('pop_limit', 10)
+        self.traces_file_path = data.pop('traces_file_path', None)
+        self.profile_builder_config_file_path = data.pop('profile_builder_config_file_path', None)
         self.num_iters = data.pop('num_iters', 10)
         self.energy_level_bins = data.pop('energy_level_bins', 3)
-
-
-class FilterConfig(Config):
-    def __init__(self, data):
-        self.kind = data.pop('kind', 'dur')
-        assert self.kind in ['dur', 'dist']
-        self.qt = data.pop('qt', 0.5)
-        assert 0 <= self.qt <= 1
-        self.dir = data.pop('dir', 'gt')
-        assert self.dir in ['gt', 'lt']
 
 
 class ATPConfig(Config):
@@ -25,8 +15,6 @@ class ATPConfig(Config):
         self.general_params = data.pop('generalParams')
 
         self.irl_params = IRLConfig(data.pop('irlParams'))
-
-        self.filter_params = FilterConfig(data.pop('filterParams'))
 
         self.activity_params = {
             'performing': data.pop('performing', 6.0),

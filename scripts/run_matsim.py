@@ -1,16 +1,14 @@
 import os
-
 # import matplotlib.pyplot as plt
-import numpy as np
 import sys
+
+from impl.persona_population_data import ExpertPersonaAgent
+
 sys.path.append('../src')
 sys.path.append('../')
 
 from file_io.activity_config import ATPConfig
 from impl.activity_env import ActivityEnv
-from impl.activity_mdp import ATPTransition, ActivityMDP
-from impl.activity_rewards import ActivityRewardFunction
-from irl.meirl import MaxEntIRLAgent
 from misc.math_utils import create_dir_if_not_exists
 
 # plt.style.use('ggplot')
@@ -58,8 +56,8 @@ def save_run_data(params, feature_names, feature_diff, nll=None, plot=True):
     # pd.DataFrame(np.hstack(theta_hist)) \
     #     .to_csv(template.format(out_path, 'theta_hist', num_iters, num_samples), index_label="feature_names")
     # if plot:
-        # plot_feature_diff(params, feature_diff)
-        # plot_log_lik(params, nll)
+    # plot_feature_diff(params, feature_diff)
+    # plot_log_lik(params, nll)
 
 
 def main():
@@ -67,27 +65,22 @@ def main():
         data = json.load(fp)
         params = ATPConfig(data)
 
-    cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),params.general_params['runId'])
+    cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),
+                                             params.general_params['runId'])
     create_dir_if_not_exists(cache_dir)
     env = ActivityEnv(params, cache_dir)
-    R = ActivityRewardFunction(params, env)
-    # R = MATSimNNReward(params, env=env)
-    T = ATPTransition(env)
-    mdp = ActivityMDP(R, T, 0.95, env)
-    theta_activity = np.random.normal(0.000, 1e-8, size=(1, len(R.activity_features)))
-    theta_travel = np.random.normal(0.0000, 1e-8, size=(1, len(R.trip_features)))
-    theta_prior = np.concatenate((theta_activity, theta_travel), axis=1)
-    expert_paths = env.paths
-    learning_agent = MaxEntIRLAgent(mdp, expert_paths, True)
+
+    learning_agent = ExpertPersonaAgent(params, env)
+
     num_iters = params.irl_params.num_iters
 
     learning_agent.learn_rewards_and_weights(num_iters,
                                              learning_rate=0.03,
-                                             minibatch_size=len(expert_paths),
-                                             initial_theta=theta_prior,
+                                             minibatch_size=len(learning_agent.trajectories),
+                                             initial_theta=learning_agent.theta_prior,
                                              cache_dir=cache_dir)
 
-    save_run_data(params, map(str, R.features), learning_agent.feature_diff, learning_agent.log_lik_hist, True)
+    save_run_data(params, map(str, learning_agent.mdp.reward.R.features), learning_agent.feature_diff, learning_agent.log_lik_hist, True)
 
 
 if __name__ == '__main__':
