@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import numpy as np
 
 
 def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
@@ -35,7 +35,17 @@ def flatten_tensor_variables(ts):
     return tf.concat(0, [tf.reshape(x, [-1]) for x in ts])
 
 
+def flatten_tensors(tensors):
+    if len(tensors) > 0:
+        return np.concatenate(map(lambda x: np.reshape(x, [-1]), tensors))
+    else:
+        return np.asarray([])
 
+
+def unflatten_tensors(flattened, tensor_shapes):
+    tensor_sizes = map(np.prod, tensor_shapes)
+    indices = np.cumsum(tensor_sizes)[:-1]
+    return map(lambda pair: np.reshape(pair[0], pair[1]), zip(np.split(flattened, indices), tensor_shapes))
 
 
 def lrelu(x, leak=0.2):

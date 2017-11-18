@@ -1,17 +1,19 @@
+"""MDP Base class representation
+Modified from
+https://github.com/makokal/funzo/blob/master/funzo/models/mdp.py
+"""
+# Py3 Compat:
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
-# TODO:
-# 1. Remove self._G and gamma in MDP since they are not part
-# of problem definitions.
-#
-#
-# modified from
-# https://github.com/makokal/funzo/blob/master/funzo/models/mdp.py
+
+# Default
 import inspect
 from abc import abstractmethod, abstractproperty, ABCMeta
 from collections import Hashable
 from functools import reduce
+
+# Third Party:
 import numpy as np
 import six
 from cytoolz import memoize
@@ -60,12 +62,25 @@ class MDP(six.with_metaclass(ABCMeta)):
             raise ValueError('MDP `discount` must be in [0, 1)')
         self._gamma = value
 
+    @memoize
     def R(self, state, action):
         return self._reward(state, action)
 
     @memoize
     def T(self, state, action):
         return self._transition(state, action)
+
+    @property
+    def transition_matrix(self):
+        if self._P is None:
+            P = np.zeros((self._env.nS, self._env.nA, self._env.nS))
+            for state in self._env.states.values():
+                for action in [self._env.actions[a] for a in self.actions(state)]:
+                    Sp = self.T(state, action)
+                    for p,sp in Sp:
+                        P[state.state_id, action.action_id, sp.state_id] = p
+            self._P = P
+        return self._P
 
     @abstractproperty
     def terminals(self):

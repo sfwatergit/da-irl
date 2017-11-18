@@ -1,20 +1,35 @@
-from src.file_io.config import Config
+from impl.config import ConfigManager
+
+TRUTHY = ["true", 1, "True", "TRUE", "t", "y", "yes"]
 
 
-class IRLConfig(Config):
+class IRLConfig(ConfigManager):
     def __init__(self, data):
-        self.segment_minutes = data.pop('segment_minutes', 15)
-        self.traces_file_path = data.pop('traces_file_path', None)
-        self.profile_builder_config_file_path = data.pop('profile_builder_config_file_path', None)
+        super(IRLConfig, self).__init__()
         self.num_iters = data.pop('num_iters', 10)
         self.energy_level_bins = data.pop('energy_level_bins', 3)
+        self.traces_file_path = data.pop('traces_file_path', None)
+        self.horizon = data.pop('horizon', 1440)
 
 
-class ATPConfig(Config):
+class ProfileBuilderConfig(ConfigManager):
+    def __init__(self, json_file):
+        super(ProfileBuilderConfig, self).__init__(json_file=json_file)
+        self.profile_builder_config_file_path = None
+        self.segment_minutes = int('15min'.replace('min', ''))
+        self.filter_weekend_days = False
+        self.filter_holidays = False
+
+
+class ATPConfig(ConfigManager):
     def __init__(self, data):
+        super(ATPConfig, self).__init__()
         self.general_params = data.pop('generalParams')
-
         self.irl_params = IRLConfig(data.pop('irlParams'))
+        self.profile_builder_config_file_path = self.general_params.pop('profile_builder_config_file_path', None)
+
+        self.profile_params = ProfileBuilderConfig(
+            json_file=self.profile_builder_config_file_path)
 
         self.activity_params = {
             'performing': data.pop('performing', 6.0),

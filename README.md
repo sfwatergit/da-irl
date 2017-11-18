@@ -21,7 +21,7 @@ economic agents based on multiple observations of their stay sequence trajectori
 ```
 @article{Feygin2017dairl,
      author = {{Feygin}, Sid and {Pozdnukhov}, Alexei},
-     title = "{DA-IRL: Structural Estimation of Full Day Activity-Travel Behavior}",
+     title = "{DA-IRL: Structural Estimation of Full Day Activity-Travel Behavior Models}",
      journal = {arXiv preprint arXiv:XXXX.XXXXXXX},
      year = 2017,
      url={https://arxiv.org/pdf/XXXX.XXXXX.pdf}

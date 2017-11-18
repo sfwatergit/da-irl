@@ -4,14 +4,11 @@ from __future__ import (
 
 import multiprocessing
 
-import gym
 import networkx as nx
-import numpy as np
-import pandas as pd
 from cytoolz import memoize
 from gym.spaces.discrete import Discrete
 from gym.spaces.tuple_space import Tuple
-from tqdm import tqdm
+import gym
 
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 
@@ -19,28 +16,50 @@ num_cores = multiprocessing.cpu_count()
 
 
 class ActivityEnv(gym.Env):
-    def __init__(self, params, demos, cache_dir=None):
-        self.irl_params = params.irl_params
-        self.segment_mins = self.irl_params.segment_minutes
+    def __init__(self, *args, **kwargs):
+        super(ActivityEnv, self).__init__()
+        self.params = kwargs.pop("params", None)
+        cache_dir = kwargs.pop("cache_dir", None)
+        self.irl_params = self.params.irl_params
+        self.segment_mins = self.params.profile_params.segment_minutes
+        self._horizon = int(self.irl_params.horizon / self.segment_mins)
         self.cache_dir = cache_dir
-        self.home_act = params.home_act
-        self.work_act = params.work_act
-        self.shopping_act = params.shopping_act
-        self.other_act = params.other_act
+        self.home_act = self.params.home_act
+        self.work_act = self.params.work_act
+        self.shopping_act = self.params.shopping_act
+        self.other_act = self.params.other_act
 
-        self.activity_types = params.activity_params.keys()
-        self.travel_modes = params.travel_params.keys()
+        self.activity_types = self.params.activity_params.keys()
+        self.travel_modes = self.params.travel_params.keys()
+        self.nA = len(self.activity_types + self.travel_modes)
+        self.actions = self._build_actions()
+        self.__actions_space = Discrete(self.nA)
 
-        self.actions = {}
+        self.nS = int(self.nA * self.horizon)
         self.states = {}
+        self.__observation_space = Tuple((self.__actions_space, Discrete(self.horizon)))
+
         self.terminals = []
         self._transition_probability_matrix = None
-        self._g = None
-        self.paths = None
+        self._g = self.build_state_graph()
+
+
+    @property
+    def horizon(self):
+        return self._horizon
+
 
     @property
     def G(self):
         return self._g
+
+    @property
+    def action_space(self):
+        return self.__actions_space
+
+    @property
+    def observation_space(self):
+        return self.__observation_space
 
     def _reset(self):
         pass
@@ -63,40 +82,6 @@ class ActivityEnv(gym.Env):
 
         """
         pass
-
-    def _trajectories_to_paths(self, tmat):
-        paths = []
-        pbar = tqdm(tmat.T, desc="Converting trajectories to state-actions")
-        for trajectory in pbar:
-            states = []
-            actions = []
-            for t, step in enumerate(trajectory):
-                tup = (step, t)
-                if tup in self.G.node:
-                    state_ix = self.G.node[tup]['attr_dict']['state'].state_id
-                    if len(states) > 0:
-                        prev_state = self.states[states[-1]]
-                        state = self.states[state_ix]
-                        s_type = state.state_label
-                        available_actions = [self.actions[act] for act in prev_state.available_actions
-                                             if (s_type == self.actions[act].succ_ix)]
-                        if len(available_actions) == 0:
-                            break
-                        act_ix = available_actions[0].action_id
-                        actions.append(act_ix)
-                    states.append(state_ix)
-            paths.append(np.array(zip(states, actions)))
-        return np.array(paths)
-
-    @staticmethod
-    def _str_tmat_to_num_tmat(str_tmat, factors):
-        tmat = np.zeros_like(str_tmat, dtype=int)
-        for i, row in enumerate(str_tmat):
-            r = pd.Series(row)
-            for k, v in zip(factors[1], factors[0]):
-                r = r.replace(k, v)
-            tmat[i] = r.values
-        return tmat
 
     def get_legal_actions_for_state(self, el):
         """
@@ -121,7 +106,14 @@ class ActivityEnv(gym.Env):
             raise ValueError("%s not Found!" % el)
         return q
 
-    def build_state_graph(self, expert_demos):
+    def _build_actions(self):
+        actions = {}
+        for action_ix, el in enumerate(self.activity_types + self.travel_modes):
+            actions[action_ix] = ATPAction(action_ix, el)
+            action_ix += 1
+        return actions
+
+    def build_state_graph(self):
         """
         Builds the mdp state graph from the travel plans
 
@@ -129,35 +121,17 @@ class ActivityEnv(gym.Env):
             The state graph
         """
 
-        data = expert_demos
         # tmat = data.tmat  # SxT matrix
-        tmat = data.T
-        els = pd.factorize(np.unique(tmat))
-        unique_elements = els[1]
-        num_states = len(unique_elements)
-
-        S = Discrete(num_states)
-        T = tmat.shape[0]
-
-        # set obs and action space from data
-        self.observation_space = Tuple((S, Discrete(T)))
-        self.action_space = S
 
         g = nx.DiGraph()
         state_ix = 0
 
-        action_ix = 0
-        # Add unique actions per state
-        for el in unique_elements:
-            self.actions[action_ix] = ATPAction(action_ix, el)
-            action_ix += 1
-
         # Add unique states
         term = False
-        for t in range(T):
-            for s, el in enumerate(unique_elements):
+        for t in range(self.horizon):
+            for s, el in enumerate(self.activity_types + self.travel_modes):
                 edge = (el, t)
-                if t < T - 1:  # if it's not the last period, we can still make decisions
+                if t < self.horizon - 1:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
                     available_actions = [self.get_home_action_id()]
@@ -180,18 +154,7 @@ class ActivityEnv(gym.Env):
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
                 state_ix += 1
-        self._g = g
-
-        t2p = self._trajectories_to_paths
-        self.paths = t2p(tmat)
-        self.nS = len(self.states)
-        self.nA = len(self.actions)
-
-    @property
-    def transition_probability_matrix(self):
-        if self._transition_probability_matrix is None:
-            self._transition_probability_matrix = nx.adjacency_matrix(self._g)
-        return self._transition_probability_matrix
+        return g
 
     def get_home_action_id(self):
         assert self.actions is not None

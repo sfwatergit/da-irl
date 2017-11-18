@@ -1,11 +1,12 @@
+import numpy as np
+import tensorflow as tf
+from cytoolz import memoize
+
+from impl.activity_env import ActivityEnv
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
 from src.misc import tf_utils
 from src.misc.math_utils import get_subclass_list, cartesian
-import tensorflow as tf
-import numpy as np
-
-from cytoolz import memoize
 
 
 class ActivityRewardFunction(RewardFunction):
@@ -14,24 +15,39 @@ class ActivityRewardFunction(RewardFunction):
     Initialized with config-defined scoring parameters.
     """
 
-    def __init__(self, params, env):
-        self.activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
-        acts = [env.home_act, env.work_act, env.shopping_act]
-        time_range = np.arange(0, 1440, 15)
-        prod = cartesian([acts, time_range])
-        act_at_x_features = [create_act_at_x_features(where, when, 15, params)(env=env) for where, when in prod]
-        self.activity_features.extend(act_at_x_features)
-        self.trip_features = []
-        for mode in params.travel_params.keys():
-            self.trip_features.extend([i(mode, params, env=env) for i in get_subclass_list(TripFeature)])
-        features = []
-        features.extend(self.activity_features)
-        features.extend(self.trip_features)
-        self._activity_feature_ixs = xrange(len(self.activity_features))
-        self._trip_feature_ixs = xrange(len(self.activity_features),
-                                        len(self.activity_features) + len(params.travel_params.keys()))
-        super(ActivityRewardFunction, self).__init__(features, env)
+    def __init__(self, env):
+        # type: (ActivityEnv) -> None
+        params = env.params
 
+        self.activity_features = self.make_activity_features(env, params)
+        self.trip_features = self.make_trip_features(env, params)
+        self._make_indices(params)
+
+        super(ActivityRewardFunction, self).__init__(self.activity_features + self.trip_features, env)
+
+    @staticmethod
+    def make_trip_features(env, params):
+        return [i(mode, params, env=env) for i in get_subclass_list(TripFeature) for mode in
+                params.travel_params.keys()]
+
+    @staticmethod
+    def make_activity_features(env, params):
+        activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
+        acts = [env.home_act, env.work_act, env.shopping_act]
+        time_range = np.arange(0, env.horizon*env.segment_mins, env.segment_mins)
+        prod = cartesian([acts, time_range])
+        act_at_x_features = [create_act_at_x_features(where, when, env.segment_mins, params)(env=env)
+                             for where, when in prod]
+        activity_features += act_at_x_features
+        return activity_features
+
+    def _make_indices(self, params):
+        assert (len(self.activity_features) > 0) and (len(self.trip_features) > 0)
+        self._activity_feature_ixs = range(len(self.activity_features))
+        self._trip_feature_ixs = range(len(self.activity_features), len(self.activity_features) +
+                                       len(params.travel_params.keys()))
+
+    @memoize
     def __call__(self, state, action):
         """
         Args:
@@ -75,8 +91,9 @@ class ActivityRewardFunction(RewardFunction):
         return phi
 
 
-class ActivityNNReward(RewardFunction):
+class ActivityNNReward(ActivityRewardFunction):
     def __init__(self, params, opt_params=None, nn_params=None, env=None):
+        super(ActivityNNReward, self).__init__(env)
 
         if nn_params is None:
             nn_params = {'h1': 100, 'h2': 50, 'l2': 10, 'name': 'maxent_deep_irl'}
@@ -85,23 +102,6 @@ class ActivityNNReward(RewardFunction):
             opt_params = {'lr': 0.01}
 
         self.lr = opt_params['lr']
-
-        self.activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
-        acts = [env.home_act, env.work_act, env.other_act]
-        time_range = np.arange(0, 1440, 15)
-        prod = cartesian([acts, time_range])
-        act_at_x_features = [create_act_at_x_features(where, when, 15, params)(env=env) for where, when in prod]
-        self.activity_features.extend(act_at_x_features)
-        self.trip_features = []
-        for mode in params.travel_params.keys():
-            self.trip_features.extend([i(mode, params, env=env) for i in get_subclass_list(TripFeature)])
-        features = []
-        features.extend(self.activity_features)
-        features.extend(self.trip_features)
-        self._activity_feature_ixs = xrange(len(self.activity_features))
-        self._trip_feature_ixs = xrange(len(self.activity_features),
-                                        len(self.activity_features) + len(params.travel_params.keys()))
-        super(ActivityNNReward, self).__init__(features, env)
 
         self.sess = tf.Session()
 
@@ -134,7 +134,7 @@ class ActivityNNReward(RewardFunction):
 
         self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
 
-        self.grad_theta = [tf.add(self.l2*self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
+        self.grad_theta = [tf.add(self.l2 * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
         self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
@@ -150,8 +150,9 @@ class ActivityNNReward(RewardFunction):
     def apply_grads(self, feat_map, grad_r):
         grad_r = np.reshape(grad_r, [-1, 1])
         feat_map = np.reshape(feat_map, [-1, self.dim_ss])
-        _, grad_theta, l2_loss, grad_norms = self.sess.run([self.optimize, self.grad_theta, self.l2_loss, self.grad_norms],
-                                                           feed_dict={self.grad_r: grad_r, self.input_ph: feat_map})
+        _, grad_theta, l2_loss, grad_norms = self.sess.run(
+            [self.optimize, self.grad_theta, self.l2_loss, self.grad_norms],
+            feed_dict={self.grad_r: grad_r, self.input_ph: feat_map})
         return grad_theta, l2_loss, grad_norms
 
     def get_theta(self):

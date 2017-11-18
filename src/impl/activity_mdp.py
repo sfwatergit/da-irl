@@ -1,4 +1,5 @@
 import numpy as np
+from cytoolz import memoize
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
 from src.misc.math_utils import make_time_string
@@ -58,7 +59,8 @@ class TravelState(ATPState):
         super(TravelState, self).__init__(state_id, mode, time_index, segment_minutes, edge)
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label, make_time_string(self.time_index*self.segment_minutes))
+        return '{}:[{}, {}]'.format(self.state_id, self.state_label,
+                                    make_time_string(self.time_index * self.segment_minutes))
 
     def __repr__(self):
         return self.__str__()
@@ -69,7 +71,8 @@ class ActivityState(ATPState):
         super(ActivityState, self).__init__(state_id, activity_type, time_index, segment_minutes, edge)
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label, make_time_string(self.time_index*self.segment_minutes))
+        return '{}:[{}, {}]'.format(self.state_id, self.state_label,
+                                    make_time_string(self.time_index * self.segment_minutes))
 
     def __repr__(self):
         return self.__str__()
@@ -79,8 +82,10 @@ class ATPTransition(TransitionFunction):
     def __init__(self, env):
         TransitionFunction.__init__(self, env)
 
+    @memoize
     def __call__(self, state, action, **kwargs):
-        data = [a for a in self.env.G.successors(state.edge) if a[0] == action.succ_ix or (state.state_id in self.env.terminals)]
+        data = [a for a in self.env.G.successors(state.edge) if
+                a[0] == action.succ_ix or (state.state_id in self.env.terminals)]
         if len(data) > 0:
             ns = self.env.G.node[data[0]]
             if len(ns) > 0:
@@ -91,12 +96,16 @@ class ATPTransition(TransitionFunction):
             raise ValueError('No resulting state or')
 
 
-
 class ActivityMDP(MDP):
-    def __init__(self, R, T, gamma, env):
+    def __init__(self, R, gamma, env):
+        T = ATPTransition(env)
         super(ActivityMDP, self).__init__(R, T, env.G, gamma, env)
         self._env = env
+        self._P = None
 
+
+
+    @memoize
     def actions(self, state):
         return self._env.get_legal_actions_for_state(state.state_label)
 

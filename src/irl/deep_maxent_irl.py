@@ -4,7 +4,7 @@ from __future__ import (
 
 import matplotlib
 
-from src.irl.meirl import MaxEntIRLAgent
+from src.irl.maxent_irl import MaxEntIRL
 from src.misc.math_utils import normalize
 
 matplotlib.use("Agg")
@@ -13,14 +13,14 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 
 
-class DeepMaxEntIRLAgent(MaxEntIRLAgent):
+class DeepMaxEntIRL(MaxEntIRL):
     """
     Refactor partially based on https://github.com/stormmax/irl-imitation/blob/master/deep_maxent_irl.py
 
     """
 
-    def __init__(self, mdp, data):
-        MaxEntIRLAgent.__init__(self, mdp, data)
+    def __init__(self, mdp, expert_agent):
+        MaxEntIRL.__init__(self, mdp, expert_agent)
 
     def svi(self, r, name="soft_vi"):
         with ops.name_scope(name, "soft_vi_pyfunc", [r]) as scope:
@@ -88,8 +88,8 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
         svf_diff = op.outputs[1]
         return [grads[1]]
 
-    def learn_rewards_and_weights(self, N, learning_rate=0.08, minibatch_size=1, initial_theta=None, reg=0.01,
-                                  cache_dir=None):
+    def learn_rewards(self, N, learning_rate=0.08, minibatch_size=1, initial_theta=None, reg=0.01,
+                      cache_dir=None):
 
         nn_r = self.mdp.reward
 
@@ -125,59 +125,6 @@ class DeepMaxEntIRLAgent(MaxEntIRLAgent):
 
         rewards = nn_r.get_rewards(fm).reshape((nS, nA))
         return normalize(rewards)
-
-
-
-def demo_svf(trajs, n_states):
-    """
-    compute state visitation frequences from demonstrations
-
-    input:
-      trajs   list of list of Steps - collected from expert
-    returns:
-      p       Nx1 vector - state visitation frequences
-    """
-
-    p = np.zeros(n_states)
-    for traj in trajs:
-        for step in traj:
-            p[step[0]] += 1
-    p = p / len(trajs)
-    return p
-
-
-def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
-    """compute the expected states visition frequency p(s| theta, T)
-    using dynamic programming
-    inputs:
-      P_a     NxNxN_ACTIONS matrix - transition dynamics
-      gamma   float - discount factor
-      trajs   list of list of Steps - collected from expert
-      policy  Nx1 vector (or NxN_ACTIONS if deterministic=False) - policy
-
-    returns:
-      p       Nx1 vector - state visitation frequencies
-    """
-    N_STATES, _, N_ACTIONS = np.shape(P_a)
-
-    T = len(trajs[0])
-    # mu[s, t] is the prob of visiting state s at time t
-    mu = np.zeros([N_STATES, T])
-
-    for traj in trajs:
-        mu[traj[0].cur_state, 0] += 1
-    mu[:, 0] = mu[:, 0] / len(trajs)
-
-    for s in range(N_STATES):
-        for t in range(T - 1):
-            if deterministic:
-                mu[s, t + 1] = sum([mu[pre_s, t] * P_a[pre_s, s, int(policy[pre_s])] for pre_s in range(N_STATES)])
-            else:
-                mu[s, t + 1] = sum(
-                    [sum([mu[pre_s, t] * P_a[pre_s, s, a1] * policy[pre_s, a1] for a1 in range(N_ACTIONS)]) for pre_s in
-                     range(N_STATES)])
-    p = np.sum(mu, 1)
-    return p
 
 
 # Define custom py_func which takes also a grad op as argument:

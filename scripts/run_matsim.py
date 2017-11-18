@@ -2,7 +2,12 @@ import os
 # import matplotlib.pyplot as plt
 import sys
 
+from swlcommon import TraceLoader
+import numpy as np
+from impl.activity_mdp import ATPTransition, ActivityMDP
+from impl.activity_rewards import ActivityRewardFunction
 from impl.persona_population_data import ExpertPersonaAgent
+from irl.maxent_irl import MaxEntIRL
 
 sys.path.append('../src')
 sys.path.append('../')
@@ -68,19 +73,22 @@ def main():
     cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),
                                              params.general_params['runId'])
     create_dir_if_not_exists(cache_dir)
-    env = ActivityEnv(params, cache_dir)
-
-    learning_agent = ExpertPersonaAgent(params, env)
+    env = ActivityEnv(params=params, cache_dir=cache_dir)
+    traces = TraceLoader.load_traces_from_csv(params.irl_params.traces_file_path)
+    expert_agent = ExpertPersonaAgent(traces, params, env)
 
     num_iters = params.irl_params.num_iters
+    learning_algorithm = MaxEntIRL(env, expert_agent, verbose=True)
 
-    learning_agent.learn_rewards_and_weights(num_iters,
-                                             learning_rate=0.03,
-                                             minibatch_size=len(learning_agent.trajectories),
-                                             initial_theta=learning_agent.theta_prior,
-                                             cache_dir=cache_dir)
+    learning_algorithm.learn_rewards(num_iters,
+                                 learning_rate=0.03,
+                                 minibatch_size=len(expert_agent.trajectories),
+                                 cache_dir=cache_dir)
 
-    save_run_data(params, map(str, learning_agent.mdp.reward.R.features), learning_agent.feature_diff, learning_agent.log_lik_hist, True)
+    save_run_data(params, map(str,
+                              learning_algorithm.mdp.reward.R.features),
+                  learning_algorithm.feature_diff,
+                  learning_algorithm.log_lik_hist, True)
 
 
 if __name__ == '__main__':

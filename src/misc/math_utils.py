@@ -5,6 +5,7 @@ import inspect
 from itertools import tee, izip
 from os import path, makedirs
 import math
+from cytoolz import memoize
 
 import numpy as np
 import functools
@@ -54,6 +55,18 @@ def cartesian(lists):
     return [x + (y,) for x in cartesian(lists[:-1]) for y in lists[-1]]
 
 
+@memoize
+def softmax(x1, x2):
+    """
+    x1: float.
+    x2: float.
+    -> softmax(x1, x2)
+    """
+
+    max_x = max(x1, x2)
+    min_x = min(x1, x2)
+    return max_x + np.log(1 + np.exp(min_x - max_x))
+
 def normalize(vals):
     """
     normalize to (0, max_val)
@@ -94,63 +107,6 @@ def get_subclass_list(supercls, module=None):
            if issubclass(subcls[1], supercls)]
     res.remove(supercls)
     return res
-
-
-def softmax(x, t=1):
-    '''
-    Numerically stable computation of t*log(\sum_j^n exp(x_j / t))
-
-    If the input is a 1D numpy array, computes it's softmax:
-        output = t*log(\sum_j^n exp(x_j / t)).
-    If the input is a 2D numpy array, computes the softmax of each of the rows:
-        output_i = t*log(\sum_j^n exp(x_{ij} / t))
-
-    Parameters
-    ----------
-    x : 1D or 2D numpy array
-
-    Returns
-    -------
-    1D numpy array
-        shape = (n,), where:
-            n = 1 if x was 1D, or
-            n is the number of rows (=x.shape[0]) if x was 2D.
-    '''
-    assert t >= 0
-    x = np.asarray(x)
-    if len(x.shape) == 1: x = x.reshape((1, -1))
-    if t == 0: return np.amax(x, axis=1)
-    if x.shape[1] == 1: return x
-
-    def softmax_2_arg(x1, x2, t):
-        '''
-        Numerically stable computation of t*log(exp(x1/t) + exp(x2/t))
-
-        Parameters
-        ----------
-        x1 : numpy array of shape (n,1)
-        x2 : numpy array of shape (n,1)
-
-        Returns
-        -------
-        numpy array of shape (n,1)
-            Each output_i = t*log(exp(x1_i / t) + exp(x2_i / t))
-        '''
-        tlog = lambda x: t * np.log(x)
-        expt = lambda x: np.exp(x / t)
-
-        max_x = np.amax((x1, x2), axis=0)
-        min_x = np.amin((x1, x2), axis=0)
-        return max_x + tlog(1 + expt((min_x - max_x)))
-
-    sm = softmax_2_arg(x[:, 0], x[:, 1], t)
-    # Use the following property of softmax_2_arg:
-    # softmax_2_arg(softmax_2_arg(x1,x2),x3) = log(exp(x1) + exp(x2) + exp(x3))
-    # which is true since
-    # log(exp(log(exp(x1) + exp(x2))) + exp(x3)) = log(exp(x1) + exp(x2) + exp(x3))
-    for (i, x_i) in enumerate(x.T):
-        if i > 1: sm = softmax_2_arg(sm, x_i, t)
-    return sm
 
 
 def mellowmax(x, t=1):
