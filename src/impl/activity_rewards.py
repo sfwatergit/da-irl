@@ -3,9 +3,9 @@ import tensorflow as tf
 from cytoolz import memoize
 
 from impl.activity_env import ActivityEnv
+from models.architectures import make_fc_net
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
-from src.misc import tf_utils
 from src.misc.math_utils import get_subclass_list, cartesian
 
 
@@ -34,7 +34,7 @@ class ActivityRewardFunction(RewardFunction):
     def make_activity_features(env, params):
         activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
         acts = [env.home_act, env.work_act, env.shopping_act]
-        time_range = np.arange(0, env.horizon*env.segment_mins, env.segment_mins)
+        time_range = np.arange(0, env.horizon * env.segment_mins, env.segment_mins)
         prod = cartesian([acts, time_range])
         act_at_x_features = [create_act_at_x_features(where, when, env.segment_mins, params)(env=env)
                              for where, when in prod]
@@ -92,11 +92,11 @@ class ActivityRewardFunction(RewardFunction):
 
 
 class ActivityNNReward(ActivityRewardFunction):
-    def __init__(self, params, opt_params=None, nn_params=None, env=None):
+    def __init__(self, env=None, opt_params=None, nn_params=None):
         super(ActivityNNReward, self).__init__(env)
 
         if nn_params is None:
-            nn_params = {'h1': 100, 'h2': 50, 'l2': 10, 'name': 'maxent_deep_irl'}
+            nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_deep_irl'}
 
         if opt_params is None:
             opt_params = {'lr': 0.01}
@@ -106,20 +106,15 @@ class ActivityNNReward(ActivityRewardFunction):
         self.sess = tf.Session()
 
         self.name = nn_params['name']
-        self.h1 = nn_params['h1']
-        self.h2 = nn_params['h2']
-        self.l2 = nn_params['l2']
+        self.h_dim = nn_params['h_dim']
+        self.reg_dim = nn_params['reg_dim']
 
         input_size = self.dim_ss
 
         self.input_ph = tf.placeholder(tf.float32, [None, input_size])
 
         with tf.variable_scope(self.name):
-            fc1 = tf_utils.fc(self.input_ph, self.h1, scope="fc1", activation_fn=tf.nn.elu,
-                              initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
-            fc2 = tf_utils.fc(fc1, self.h2, scope="fc2", activation_fn=tf.nn.elu,
-                              initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
-            reward = tf_utils.fc(fc2, 1, scope="reward")
+            reward = make_fc_net(self.input_ph, self.h_dim)
         theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
 
         self.reward = reward

@@ -4,15 +4,30 @@ from __future__ import (
 
 import multiprocessing
 
+import gym
 import networkx as nx
-from cytoolz import memoize
+from enum import IntEnum
 from gym.spaces.discrete import Discrete
 from gym.spaces.tuple_space import Tuple
-import gym
 
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 
 num_cores = multiprocessing.cpu_count()
+
+
+class ATPActionType(IntEnum):
+    STAY = 0
+    DEPART = 1
+    ARRIVE = 2
+    CONTINUE_JOURNEY = 3
+
+    @property
+    def activity_action_types(self):
+        return [self.STAY.value, self.DEPART.value]
+
+    @property
+    def travel_action_types(self):
+        return [self.ARRIVE.value, self.CONTINUE_JOURNEY.value]
 
 
 class ActivityEnv(gym.Env):
@@ -43,11 +58,9 @@ class ActivityEnv(gym.Env):
         self._transition_probability_matrix = None
         self._g = self.build_state_graph()
 
-
     @property
     def horizon(self):
         return self._horizon
-
 
     @property
     def G(self):
@@ -99,19 +112,15 @@ class ActivityEnv(gym.Env):
 
         """
         if el in self.activity_types:
-            q = [k for k, v in self.actions.items() if (v.succ_ix in self.travel_modes or v.succ_ix == el)]
+            return ATPActionType.activity_action_types
         elif el in self.travel_modes:
-            q = self.actions.keys()
+            return ATPActionType.travel_action_types
         else:
             raise ValueError("%s not Found!" % el)
-        return q
 
     def _build_actions(self):
-        actions = {}
-        for action_ix, el in enumerate(self.activity_types + self.travel_modes):
-            actions[action_ix] = ATPAction(action_ix, el)
-            action_ix += 1
-        return actions
+        return dict(((v.value, ATPAction(k.lower(), v.value))
+                     for k, v in ATPActionType.__members__.items()))
 
     def build_state_graph(self):
         """
