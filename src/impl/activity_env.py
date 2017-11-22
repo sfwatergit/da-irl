@@ -15,20 +15,6 @@ from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 num_cores = multiprocessing.cpu_count()
 
 
-class ATPActionType(IntEnum):
-    STAY = 0
-    DEPART = 1
-    ARRIVE = 2
-    CONTINUE_JOURNEY = 3
-
-    @property
-    def activity_action_types(self):
-        return [self.STAY.value, self.DEPART.value]
-
-    @property
-    def travel_action_types(self):
-        return [self.ARRIVE.value, self.CONTINUE_JOURNEY.value]
-
 
 class ActivityEnv(gym.Env):
     def __init__(self, *args, **kwargs):
@@ -112,15 +98,20 @@ class ActivityEnv(gym.Env):
 
         """
         if el in self.activity_types:
-            return ATPActionType.activity_action_types
+            q = [k for k, v in self.actions.items() if (v.succ_ix in self.travel_modes or v.succ_ix == el)]
         elif el in self.travel_modes:
-            return ATPActionType.travel_action_types
+            q = self.actions.keys()
         else:
             raise ValueError("%s not Found!" % el)
+        return q
+
 
     def _build_actions(self):
-        return dict(((v.value, ATPAction(k.lower(), v.value))
-                     for k, v in ATPActionType.__members__.items()))
+        actions = {}
+        for action_ix, el in enumerate(self.activity_types + self.travel_modes):
+            actions[action_ix] = ATPAction(action_ix, el)
+            action_ix += 1
+        return actions
 
     def build_state_graph(self):
         """
@@ -140,7 +131,7 @@ class ActivityEnv(gym.Env):
         for t in range(self.horizon):
             for s, el in enumerate(self.activity_types + self.travel_modes):
                 edge = (el, t)
-                if t < self.horizon - 1:  # if it's not the last period, we can still make decisions
+                if t < self.horizon-2:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
                     available_actions = [self.get_home_action_id()]
@@ -158,11 +149,16 @@ class ActivityEnv(gym.Env):
                     el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
                     self.terminals.append(state_ix)
                     self.home_state = el_type
-                    g.add_edge(edge, (self.home_act, t), attr_dict={'ix': available_actions[0]})
+                    g.add_edge(edge, (self.home_act, t+1), attr_dict={'ix': available_actions[0]})
                 el_type.available_actions.extend(available_actions)
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
                 state_ix += 1
+
+        edge = (self.home_state, self.horizon)
+        el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
+        el_type.available_actions.extend(available_actions)
+        g.add_node(edge, attr_dict={'ix':state_ix, 'pos': edge, 'state':el_type})
         return g
 
     def get_home_action_id(self):

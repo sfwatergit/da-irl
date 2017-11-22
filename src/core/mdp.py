@@ -185,14 +185,14 @@ class Action(six.with_metaclass(ABCMeta, Hashable)):
 
 
 class RewardFunction(six.with_metaclass(ABCMeta)):
-    def __init__(self, features, env=None, rmax=1.0):
+    def __init__(self, features, env=None, rmax=1.0, initial_weights=None):
         # keep a reference to parent MDP to get access to environment and
         # dynamics
         self._features = features
         self._env = env
         self._rmax = rmax
         self._dim_ss = reduce(lambda x, y: x + y, [len(x) for x in features])
-        self._weights = np.random.normal(size=(1, self._dim_ss))
+
         self._feature_matrix = None
         self._r = None
 
@@ -208,10 +208,6 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
     def dim_ss(self):
         return self._dim_ss
 
-    @abstractmethod
-    def __call__(self, state, action):
-        raise NotImplementedError
-
     @property
     def feature_matrix(self):
         if self._feature_matrix is None:
@@ -221,7 +217,7 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
                 s = state.state_id
                 for a in actions:
                     if s in self._env.terminals:
-                        self._feature_matrix[s, a] = np.zeros(self._dim_ss, 1)
+                        self._feature_matrix[s, a] = np.zeros([self._dim_ss])
                     else:
                         self._feature_matrix[s, a] = self.phi(s, a).T
         return self._feature_matrix
@@ -233,54 +229,6 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
         else:
             action = self._env.actions[a]
         return np.concatenate([feature(state, action) for feature in self._features])
-
-
-class LinearRewardFunction(six.with_metaclass(ABCMeta, RewardFunction)):
-    """ RewardFunction using linear function approximation
-    The reward funtion is define as,
-    .. math::
-        r(s, a) = \sum_i w_i \phi_i(s, a)
-    where :math:`\phi_i(s, a)` is a feature defined over state and action
-    spaces of the underlying MDP. The ``weights`` are the parameters of the
-    model and are usually assumed to sum to 1 to ensure that the reward
-    remains bounded, a typical assumption used in most RL planners.
-    """
-
-    _template = '_feature_'
-
-    def __init__(self, weights, rmax=1.0, env=None):
-        super(LinearRewardFunction, self).__init__(rmax, env)
-        self._weights = np.asarray(weights)
-        assert self._weights.ndim == 1, 'Weights must be 1D arrays'
-
-    def update_parameters(self, **kwargs):
-        """ Update the weights parameters of the reward function model """
-        if 'reward' in kwargs:
-            w = np.asarray(kwargs['reward'])
-            assert w.shape == self._weights.shape, \
-                'New weight array size must match reward function dimension'
-            self._weights = w
-
-    @property
-    def kind(self):
-        """ Type of reward function (e.g. tabular, LFA) """
-        return 'LFA'
-
-    @abstractmethod
-    def phi(self, state, action):
-        """ Evaluate the reward features for state-action pair """
-        raise NotImplementedError('abstract')
-
-    def __len__(self):
-        """ Dimension of the reward function in the case of LFA """
-        # - count all class members named '_feature_{x}'
-        dim = 0
-        for name in self.__class__.__dict__:
-            item = getattr(self.__class__, name)
-            if inspect.ismethod(item):
-                if item.__name__.startswith(self._template):
-                    dim += 1
-        return dim
 
 
 class FeatureExtractor(six.with_metaclass(ABCMeta)):

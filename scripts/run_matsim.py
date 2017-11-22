@@ -3,18 +3,17 @@ import os
 import sys
 
 from swlcommon import TraceLoader
-import numpy as np
-from impl.activity_mdp import ATPTransition, ActivityMDP
-from impl.activity_rewards import ActivityRewardFunction
+
+from algos.maxent_irl import MaxEntIRL
 from impl.persona_population_data import ExpertPersonaAgent
-from irl.maxent_irl import MaxEntIRL
+from misc import logger
 
 sys.path.append('../src')
 sys.path.append('../')
 
 from file_io.activity_config import ATPConfig
 from impl.activity_env import ActivityEnv
-from misc.math_utils import create_dir_if_not_exists
+from util.math_utils import create_dir_if_not_exists
 
 # plt.style.use('ggplot')
 
@@ -72,7 +71,9 @@ def main():
 
     cache_dir = '{}/.cache/joblib/{}'.format(os.path.dirname(os.path.realpath(__file__)),
                                              params.general_params['runId'])
+
     create_dir_if_not_exists(cache_dir)
+    logger.log("Obtaining samples...")
     env = ActivityEnv(params=params, cache_dir=cache_dir)
     traces = TraceLoader.load_traces_from_csv(params.irl_params.traces_file_path)
     expert_agent = ExpertPersonaAgent(traces, params, env)
@@ -80,10 +81,9 @@ def main():
     num_iters = params.irl_params.num_iters
     learning_algorithm = MaxEntIRL(env, expert_agent, verbose=True)
 
-    learning_algorithm.learn_rewards(num_iters,
-                                 learning_rate=0.03,
-                                 minibatch_size=len(expert_agent.trajectories),
-                                 cache_dir=cache_dir)
+    learning_algorithm.train(num_iters,
+                             minibatch_size=len(expert_agent.trajectories),
+                             cache_dir=cache_dir)
 
     save_run_data(params, map(str,
                               learning_algorithm.mdp.reward.R.features),

@@ -4,10 +4,11 @@ from abc import ABCMeta
 
 import numpy as np
 import six
-
-from core.base import IRLAlgorithm
-from misc.math_utils import softmax
 from scipy.misc import logsumexp as sp_lse
+
+from algos.base import IRLAlgorithm
+from misc import logger
+from util.math_utils import softmax
 
 INF = np.nan_to_num([1 * float("-inf")])
 
@@ -86,11 +87,11 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
            """
         savf = np.zeros((self.nS, self.nA), dtype=np.float32)
-        for trajectory in self.expert_demos:
+        for trajectory in  self.expert_demos:
             for state, action in trajectory:
                 savf[state, action] += 1
 
-        savf /= len(self._current_batch)
+        savf /= len(self.expert_demos)
         return savf
 
     def get_path_feature_counts(self, path):
@@ -128,45 +129,39 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         """
         start_time = time.time()
 
-        nA = self.nA
-        nS = self.nS
-
-        V = np.nan_to_num(np.ones((nS, 1)) * float("-inf"))
+        V = np.nan_to_num(np.ones((self.nS, 1)) * float("-inf"))
 
         V_pot = V.copy()
         V_pot[self.mdp.env.terminals] = 0.0
-        diff = np.ones(nS)
-        Q = np.nan_to_num(np.ones((nS, nA)) * float("-inf"))
+
+        diff = float("inf")
         t = 0
 
-        while (diff > 1e-2).all():
+        while (diff > 1e-2):
             Vp = V_pot.copy()
-            for s_x in reversed(self.mdp.S):
-                state = self.mdp.env.states[s_x]
-                actions = state.available_actions
-                for a_xy in actions:
-                    action = self.mdp.env.actions[a_xy]
-                    outcomes = self.mdp.T(state, action)
-                    Q[s_x, a_xy] = np.sum([o[0] * (V[o[1].state_id] + reward[s_x, a_xy]) for o in outcomes])
-                    Vp[s_x] = softmax(Vp[s_x][0], Q[s_x, a_xy])
-            diff = np.abs(V - Vp).max()
+            for a_xy in reversed(self.mdp.A):
+                Vp = softmax(np.hstack(
+                    [Vp, reward[:, a_xy].reshape([-1, 1]) +0.99 * self.mdp.transition_matrix[:, a_xy, :].dot(V)])).reshape(
+                    -1, 1)
+
+            diff = np.amax(abs(Vp - V))
             V = Vp.copy()
 
             if t % 5 == 0:
                 num_neg_infs = len(V[V < -1.e4])
                 if self.VERBOSE:
-                    print('t:{}, Delta V:{}, No. divergent states: {}'.format(t, diff, num_neg_infs))
+                    logger.log('t:{}, Delta V:{}, No. divergent states: {}'.format(t, diff, num_neg_infs))
             t += 1
 
-        policy = self.compute_policy(Q, V)
+        Q = reward + np.squeeze(self.mdp.transition_matrix.dot(V))
+        policy = get_policy(Q)
 
         self._MAX_ITER = t
-        if self.VERBOSE:
-            print('Computed policy in {:,.2f} seconds'.format(time.time() - start_time))
+
         print(policy)
         return policy.astype(np.float32)
 
-    def state_visitation_frequency(self, policy):
+    def state_visitation_frequency(self, pi, ent_wt=1.0, discount=1.0):
         """
         Args:
             policy: most recently computed policy
@@ -175,25 +170,18 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             (np.ndarray) unnormalized state visitation distribution
 
         """
-        start_time = time.time()
-        p_start_state = self.get_start_state_dist(self._current_batch)
-        expected_svf = np.tile(p_start_state, (self._MAX_ITER, 1)).T
+        state_visitation = np.expand_dims(self.get_start_state_dist(self._current_batch), axis=1)
+        sa_visit_t = np.zeros(
+            (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], self._MAX_ITER))
 
-        for t in range(1, self._MAX_ITER):
-            expected_svf[:, t] = 0
-            for s_x in self.mdp.S:
-                state = self.mdp.env.states[s_x]
-                actions = state.available_actions
-                for a_xy in actions:
-                    action = self.mdp.env.actions[a_xy]
-                    outcomes = self.mdp.T(state, action)
-                    for o in outcomes:
-                        s_z = o[1].state_id
-                        p = o[0]
-                        expected_svf[s_z, t] += p * (expected_svf[s_x, t - 1] *
-                                                     policy[s_x, a_xy])
-        print('Computed svf in {:,.2f} seconds'.format(time.time() - start_time))
-        return np.sum(expected_svf, 1).astype(np.float32).reshape(self.nS, 1)
+        for i in range(self._MAX_ITER):
+            sa_visit = state_visitation * pi
+            sa_visit_t[:, :, i] = sa_visit  # (discount**i) * sa_visit
+            # sum-out (SA)S
+            new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
+            state_visitation = np.expand_dims(new_state_visitation, axis=1)
+        return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True)
+
 
     def compute_policy(self, Q, V):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
@@ -212,7 +200,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 policy[s_x, a_xy] = np.exp(Q[s_x, a_xy] - V[s_x])
         return policy
 
-    def learn_rewards(self):
+    def train(self):
         pass
 
     def get_action(self, s_t):
@@ -232,51 +220,27 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
     def get_reward(self):
         return self.mdp.reward
 
+    def get_expected_state_feature_counts(self, pi, svf):
+        expected_state_feature_counts = np.zeros((self._dim_ss, 1))
+        for sx in self.mdp.S:
+            actions = self.mdp.env.states[sx].available_actions
+            for axy in actions:
+                expected_state_feature_counts += (self.mdp.reward.phi(sx, axy) * pi[sx, axy] * svf[sx])
+        return expected_state_feature_counts
 
-def q_iteration(transition_matrix, reward_matrix, K=50, gamma=0.99, ent_wt=0.1, warmstart_q=None, policy=None):
-    """
-    Perform tabular soft Q-iteration
-
-    If policy is given, this computes Q_pi rather than Q_star
-    """
-
-    q_fn = warmstart_q
-
-    t_matrix = transition_matrix
-    for k in range(K):
-        if policy is None:
-            v_fn = logsumexp(q_fn, alpha=ent_wt)
-        else:
-            v_fn = np.sum((q_fn - np.log(policy))*policy, axis=1)
-        new_q = reward_matrix + gamma*t_matrix.dot(v_fn)
-        q_fn = new_q
-    return q_fn
+    def optimize_reward(self):
+        raise NotImplementedError
 
 def logsumexp(q, alpha=1.0, axis=1):
-    return alpha*sp_lse((1.0/alpha)*q, axis=axis)
+    return alpha * sp_lse((1.0 / alpha) * q, axis=axis)
 
 
 def get_policy(q_fn, ent_wt=1.0):
     """
     Return a policy by normalizing a Q-function
     """
-    v_rew = logsumexp(q_fn, alpha=ent_wt)
+    v_rew = softmax(q_fn)
     adv_rew = q_fn - np.expand_dims(v_rew, axis=1)
-    pol_probs = np.exp((1.0/ent_wt)*adv_rew)
+    pol_probs = np.exp((1.0 / ent_wt) * adv_rew)
     assert np.all(np.isclose(np.sum(pol_probs, axis=1), 1.0)), str(pol_probs)
     return pol_probs
-
-
-def compute_visitation(p, t_matrix, q_fn, ent_wt=1.0, T=50, discount=1.0):
-    pol_probs = get_policy(q_fn, ent_wt=ent_wt)
-
-    state_visitation = np.expand_dims(p, axis=1)
-    sa_visit_t = np.zeros((t_matrix.shape[0], t_matrix.shape[1], T))
-
-    for i in range(T):
-        sa_visit = state_visitation * pol_probs
-        sa_visit_t[:,:,i] = sa_visit #(discount**i) * sa_visit
-        # sum-out (SA)S
-        new_state_visitation = np.einsum('ij,ijk->k', sa_visit, t_matrix)
-        state_visitation = np.expand_dims(new_state_visitation, axis=1)
-    return np.sum(sa_visit_t, axis=2) / float(T)

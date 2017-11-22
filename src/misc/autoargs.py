@@ -1,10 +1,9 @@
 import inspect
 
-
+from core.mdp import MDP
 # pylint: disable=redefined-builtin
 # pylint: disable=protected-access
-from core.base import Algorithm
-from core.mdp import MDP
+from algos.base import Algorithm
 
 
 def arg(name, type=None, help=None, nargs=None, mapper=None, choices=None,
@@ -33,8 +32,6 @@ def prefix(prefix_):
 
 
 def _get_prefix(cls):
-    from rllab.policies.base import Policy
-    from rllab.baselines.base import Baseline
 
     if hasattr(cls.__init__, '_autoargs_prefix'):
         return cls.__init__._autoargs_prefix

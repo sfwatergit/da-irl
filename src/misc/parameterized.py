@@ -5,7 +5,7 @@ from __future__ import (
 import tensorflow as tf
 
 from misc.serializable import Serializable
-from misc.tf_utils import unflatten_tensors, flatten_tensors
+from util.tf_utils import unflatten_tensors, flatten_tensors
 
 
 class Parameterized(object):

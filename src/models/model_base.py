@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from misc.misc_utils import lazy_property
+from util.misc_utils import lazy_property
 
 
 class Model:

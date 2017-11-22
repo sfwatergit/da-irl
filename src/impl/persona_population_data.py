@@ -3,9 +3,6 @@ import numpy as np
 from swlcommon.personatrainer.persona import Persona
 from tqdm import tqdm
 
-from impl.activity_mdp import ATPTransition, ActivityMDP
-from impl.activity_rewards import ActivityRewardFunction
-
 
 class ExpertPersonaAgent(object):
     def __init__(self, traces, params, env):

@@ -4,8 +4,8 @@ from __future__ import (
 
 import matplotlib
 
-from src.irl.maxent_irl import MaxEntIRL
-from src.misc.math_utils import normalize
+from src.algos.maxent_irl import MaxEntIRL
+from util.math_utils import normalize
 
 matplotlib.use("Agg")
 import numpy as np
@@ -15,7 +15,7 @@ from tensorflow.python.framework import ops
 
 class DeepMaxEntIRL(MaxEntIRL):
     """
-    Refactor partially based on https://github.com/stormmax/irl-imitation/blob/master/deep_maxent_irl.py
+    Refactor partially based on https://github.com/stormmax/algos-imitation/blob/master/deep_maxent_irl.py
 
     """
 
@@ -88,8 +88,8 @@ class DeepMaxEntIRL(MaxEntIRL):
         svf_diff = op.outputs[1]
         return [grads[1]]
 
-    def learn_rewards(self, N, learning_rate=0.08, minibatch_size=1, initial_theta=None, reg=0.01,
-                      cache_dir=None):
+    def train(self, N, learning_rate=0.08, minibatch_size=1, initial_theta=None, reg=0.01,
+              cache_dir=None):
 
         nn_r = self.mdp.reward
 

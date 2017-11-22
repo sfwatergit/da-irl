@@ -8,7 +8,7 @@
     "runId": "multimodal_0"
   },
   "irlParams": {
-    "traces_file_path": "../data/traces/traces_persona_1.csv",
+    "traces_file_path": "../data/traces/traces_persona_0.csv",
     "num_iters": 50,
     "horizon": 1440
   },
@@ -68,15 +68,6 @@
       "openingTime": "07:00:00",
       "typicalDuration": "undefined",
       "type": "shopping"
-    },
-    "pt interaction": {
-      "closingTime": "00:00:00",
-      "earliestEndTime": "undefined",
-      "latestStartTime": "undefined",
-      "minimalDuration": "undefined",
-      "openingTime": "00:00:00",
-      "typicalDuration": "00:02:00",
-      "type": "other"
     }
   },
   "modeParams": {
@@ -84,21 +75,6 @@
       "constant": 0.0,
       "marginalUtilityOfDistance_util_m": 0.0,
       "marginalUtilityOfDistance_util_hr": -6.0
-    },
-    "pt": {
-      "constant": 0.0,
-      "marginalUtilityOfDistance_util_m": 0.0,
-      "marginalUtilityOfDistance_util_hr": 0.0
-    },
-    "walk": {
-      "constant": 0.0,
-      "marginalUtilityOfDistance_util_m": 0.0,
-      "marginalUtilityOfDistance_util_hr": -2.0
-    },
-    "transit_walk": {
-      "constant": 0.0,
-      "marginalUtilityOfDistance_util_m": 0.0,
-      "marginalUtilityOfDistance_util_hr": -2.0
     }
   }
 }
