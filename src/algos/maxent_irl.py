@@ -15,7 +15,6 @@ from src.core.irl_algorithm import BaseMaxEntIRLAlgorithm
 
 class MaxEntIRL(BaseMaxEntIRLAlgorithm):
     def __init__(self, env,
-                 expert_agent,
                  reward_prior=None,
                  policy_prior=None,
                  load=False,
@@ -26,15 +25,16 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         R = ActivityLinearRewardFunction(env)
 
         mdp = ActivityMDP(R, 0.95, env)
-        BaseMaxEntIRLAlgorithm.__init__(self, mdp, expert_agent, reward_prior, policy_prior, verbose)
+
         self.tol = avi_tol
         self.load = load
         self.filepath = filepath
+        BaseMaxEntIRLAlgorithm.__init__(self, mdp, reward_prior, policy_prior, verbose)
 
-    def train(self, n_iter=1,
-              minibatch_size=1,
-              reg=0.01,
-              cache_dir=None):
+    def train(self, trajectories, n_iter=1, minibatch_size=1, reg=0.01, cache_dir=None):
+
+        self.expert_demos = trajectories
+        self._max_path_length = sum(len(path) for path in self.expert_demos)
 
         mu_D = self.get_empirical_savf()
 

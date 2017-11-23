@@ -10,5 +10,5 @@ class RLAlgorithm(Algorithm):
 
 class IRLAlgorithm(Algorithm):
 
-    def train(self):
+    def train(self, trajectories):
         raise NotImplementedError

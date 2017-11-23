@@ -25,7 +25,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
            Twenty-Second Conference on Artificial Intelligence (AAAI), 1433–1438.
        """
 
-    def __init__(self, mdp, expert_agent, reward_prior=None, policy_prior=None, verbose=False):
+    def __init__(self, mdp, reward_prior=None, policy_prior=None, verbose=False):
         """
 
         Args:
@@ -41,10 +41,10 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         self.policy = policy_prior
         self.reward = reward_prior
 
-        self.expert_demos = expert_agent.trajectories
+        self.expert_demos = None
         self._current_batch = None
         self._dim_ss = mdp.reward.dim_ss
-        self._total_num_paths = sum(len(path) for path in self.expert_demos)
+        self._total_num_paths = None
         self._max_path_length = 0
 
         self.feature_diff = []
@@ -199,8 +199,8 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 policy[s_x, a_xy] = np.exp(Q[s_x, a_xy] - V[s_x])
         return policy
 
-    def train(self):
-        pass
+    def train(self, trajectories):
+        raise NotImplementedError
 
     def get_action(self, s_t):
         """

@@ -40,11 +40,22 @@ def run(config, cache_dir, log_dir):
     expert_agent = ExpertPersonaAgent(traces, config, env)
 
     num_iters = config.irl_params.num_iters
-    learning_algorithm = MaxEntIRL(env, expert_agent, verbose=False)
+    learning_algorithm = MaxEntIRL(env, verbose=False)
 
-    learning_algorithm.train(num_iters,
-                             minibatch_size=len(expert_agent.trajectories),
-                             cache_dir=cache_dir)
+    learning_algorithm.train(
+        expert_agent.trajectories,
+        num_iters,
+        minibatch_size=len(expert_agent.trajectories),
+        cache_dir=cache_dir)
+
+    traces = TraceLoader.load_traces_from_csv("/Users/sfeygin/PycharmProjects/da-irl/data/traces/traces_persona_1.csv")
+    expert_agent = ExpertPersonaAgent(traces, config, env)
+
+    learning_algorithm.train(
+        expert_agent.trajectories,
+        num_iters,
+        minibatch_size=len(expert_agent.trajectories),
+        cache_dir=cache_dir)
 
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
