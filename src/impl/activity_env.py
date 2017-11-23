@@ -6,7 +6,6 @@ import multiprocessing
 
 import gym
 import networkx as nx
-from enum import IntEnum
 from gym.spaces.discrete import Discrete
 from gym.spaces.tuple_space import Tuple
 
@@ -15,23 +14,20 @@ from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 num_cores = multiprocessing.cpu_count()
 
 
-
 class ActivityEnv(gym.Env):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config, *args, **kwargs):
         super(ActivityEnv, self).__init__()
-        self.params = kwargs.pop("params", None)
-        cache_dir = kwargs.pop("cache_dir", None)
-        self.irl_params = self.params.irl_params
-        self.segment_mins = self.params.profile_params.segment_minutes
+        self._config = config
+        self.irl_params = self._config.irl_params
+        self.segment_mins = self._config.profile_params.segment_minutes
         self._horizon = int(self.irl_params.horizon / self.segment_mins)
-        self.cache_dir = cache_dir
-        self.home_act = self.params.home_act
-        self.work_act = self.params.work_act
-        self.shopping_act = self.params.shopping_act
-        self.other_act = self.params.other_act
+        self.home_act = self._config.home_act
+        self.work_act = self._config.work_act
+        self.shopping_act = self._config.shopping_act
+        self.other_act = self._config.other_act
 
-        self.activity_types = self.params.activity_params.keys()
-        self.travel_modes = self.params.travel_params.keys()
+        self.activity_types = self._config.activity_params.keys()
+        self.travel_modes = self._config.travel_params.keys()
         self.nA = len(self.activity_types + self.travel_modes)
         self.actions = self._build_actions()
         self.__actions_space = Discrete(self.nA)
@@ -105,7 +101,6 @@ class ActivityEnv(gym.Env):
             raise ValueError("%s not Found!" % el)
         return q
 
-
     def _build_actions(self):
         actions = {}
         for action_ix, el in enumerate(self.activity_types + self.travel_modes):
@@ -131,7 +126,7 @@ class ActivityEnv(gym.Env):
         for t in range(self.horizon):
             for s, el in enumerate(self.activity_types + self.travel_modes):
                 edge = (el, t)
-                if t < self.horizon-2:  # if it's not the last period, we can still make decisions
+                if t < self.horizon - 2:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
                     available_actions = [self.get_home_action_id()]
@@ -149,7 +144,7 @@ class ActivityEnv(gym.Env):
                     el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
                     self.terminals.append(state_ix)
                     self.home_state = el_type
-                    g.add_edge(edge, (self.home_act, t+1), attr_dict={'ix': available_actions[0]})
+                    g.add_edge(edge, (self.home_act, t + 1), attr_dict={'ix': available_actions[0]})
                 el_type.available_actions.extend(available_actions)
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
@@ -158,7 +153,7 @@ class ActivityEnv(gym.Env):
         edge = (self.home_state, self.horizon)
         el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
         el_type.available_actions.extend(available_actions)
-        g.add_node(edge, attr_dict={'ix':state_ix, 'pos': edge, 'state':el_type})
+        g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
         return g
 
     def get_home_action_id(self):

@@ -17,7 +17,7 @@ class ActivityLinearRewardFunction(RewardFunction):
 
     def __init__(self, env, opt_params=None, nn_params=None, rmax=1.0, initial_theta=None):
         # type: (ActivityEnv) -> None
-        params = env.params
+        params = env._config
         self.activity_features = self.make_activity_features(env, params)
         self.trip_features = self.make_trip_features(env, params)
         self._make_indices(params)

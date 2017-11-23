@@ -33,34 +33,15 @@ def plot_reward(ys, log_dir='', title='', color='b', show=False):
         plt.savefig(log_dir + '/persona_0_activity_{}'.format(title))
 
 
-def run(config, cache_dir, log_dir):
-    env = ActivityEnv(params=config, cache_dir=cache_dir)
-    traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
-    expert_agent = ExpertPersonaAgent(traces, config, env)
-
-    num_iters = config.irl_params.num_iters
-    learning_algorithm = MaxEntIRL(env, verbose=False)
-
-    learning_algorithm.train(
-        expert_agent.trajectories,
-        num_iters,
-        minibatch_size=len(expert_agent.trajectories),
-        cache_dir=cache_dir)
-
-    # traces = TraceLoader.load_traces_from_csv("/Users/sfeygin/PycharmProjects/da-irl/data/traces/traces_persona_1.csv")
-    # expert_agent = ExpertPersonaAgent(traces, config, env)
-    #
-    # learning_algorithm.train(
-    #     expert_agent.trajectories,
-    #     num_iters,
-    #     minibatch_size=len(expert_agent.trajectories),
-    #     cache_dir=cache_dir)
+def run(config, log_dir):
+    expert_agent = ExpertPersonaAgent(config)
+    expert_agent.learn_reward()
 
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
 
     logger.pop_prefix()
-    theta = learning_algorithm.mdp.reward.get_theta()
+    theta = expert_agent.reward.get_theta()
     home_feats = theta[4:96]
     work_feats = theta[98:192]
     other_feats = theta[193:-4]
@@ -136,7 +117,5 @@ if __name__ == '__main__':
     logger.set_snapshot_dir(log_dir)
     logger.set_log_tabular_only(args.log_tabular_only)
     logger.push_prefix("[%s] " % exp_name)
-    cache_dir = '{}/.cache/joblib/{}'.format(osp.dirname(osp.realpath(__file__)),
-                                             config.general_params.run_id)
 
-    run(config, cache_dir, log_dir)
+    run(config, log_dir)

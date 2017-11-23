@@ -1,40 +1,43 @@
 import numpy as np
-
+from swlcommon import TraceLoader
 from swlcommon.personatrainer.persona import Persona
 from tqdm import tqdm
 
+from algos.maxent_irl import MaxEntIRL
+from impl.activity_env import ActivityEnv
+
 
 class ExpertPersonaAgent(object):
-    def __init__(self, traces, params, env):
+    def __init__(self, config, env_type=ActivityEnv, learning_algorithm=MaxEntIRL):
         """PersonaAgent representation. To be used in IRLAgent.
 
         Args:
             persona (Persona): persona representation of traveler.
         """
-
+        self._config = config
+        self.env = env_type(config=config)
+        traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
         self.persona = Persona(traces=traces, build_profile=True,
-                               config_file=params.general_params.profile_builder_config_file_path)
+                               config_file=self._config.general_params.profile_builder_config_file_path)
         self._pid = self.persona.id
-        self._secondary_labels = self.persona.habitat.secondary_site_ids
-        self._work_label = self.persona.works
-        self._home_label = self.persona.homes
+        self._secondary_sites = self.persona.habitat.secondary_site_ids
+        self._work = self.persona.works[0]
+        self._home = self.persona.homes[0]
         self._profile = self.persona.get_profile_as_array().T
         self._trajectories = None
-
-        self.env = env
-
+        self._learning_algorithm = learning_algorithm(self.env, verbose=False)
 
     @property
-    def home_label(self):
-        return self._home_label
+    def home_site(self):
+        return self._home
 
     @property
-    def work_label(self):
-        return self._work_label
+    def work_site(self):
+        return self._work
 
     @property
-    def secondary_labels(self):
-        return self._secondary_labels
+    def secondary_sites(self):
+        return self._secondary_sites
 
     @property
     def trajectories(self):
@@ -42,6 +45,19 @@ class ExpertPersonaAgent(object):
             t2p = self._profile_to_trajectories
             self._trajectories = t2p(self._profile)
         return self._trajectories
+
+    @property
+    def reward(self):
+        return self._learning_algorithm.reward
+
+    @property
+    def policy(self):
+        return self._learning_algorithm.policy
+
+    def learn_reward(self):
+        self._learning_algorithm.train(self.trajectories,
+                                       self._config.irl_params.num_iters,
+                                       len(self.trajectories))
 
     def _profile_to_trajectories(self, tmat):
         trajectories = []
@@ -61,7 +77,7 @@ class ExpertPersonaAgent(object):
                                              for act in prev_state.available_actions
                                              if (s_type == self.env.actions[act].succ_ix)]
                         if len(available_actions) == 0:
-                            available_actions=[self.env.actions[5]]
+                            available_actions = [self.env.actions[5]]
                         act_ix = available_actions[0].action_id
                         actions.append(act_ix)
                     states.append(state_ix)
