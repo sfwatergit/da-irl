@@ -11,8 +11,6 @@ from impl.activity_mdp import ActivityMDP
 from impl.activity_rewards import ActivityLinearRewardFunction
 from misc import logger
 from src.core.irl_algorithm import BaseMaxEntIRLAlgorithm
-from util.math_utils import adam
-
 
 
 class MaxEntIRL(BaseMaxEntIRLAlgorithm):
@@ -38,37 +36,32 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
               reg=0.01,
               cache_dir=None):
 
+        mu_D = self.get_empirical_savf()
+
         self.reward = self.mdp.reward
-        config = None
 
-        empirical_feature_counts = self.get_empirical_feature_counts()
-
+        start_time = time.time()
         for i in range(n_iter):
             iter_data = self.expert_demos
             iter_data_idxs = np.arange(0, len(iter_data))
             np.random.shuffle(iter_data_idxs)
             n_iters = int(float(len(iter_data) / minibatch_size))
-            mu_D = self.get_empirical_savf()
-            for iter in range(n_iters):
-                with logger.prefix("itr #%d| " % iter):
+            for itr in range(n_iters):
+                logger.record_tabular("Iteration", i)
+                with logger.prefix("itr #%d:%d| " % (i, itr + 1)):
                     iter_start_time = time.time()
                     minibatch = np.random.choice(iter_data_idxs, minibatch_size, False)
                     self._current_batch = iter_data[minibatch]
-
-                    logger.log('\tMinibatch: {} of {} (iter {})'.format(iter, n_iters, i))
-
                     polopt_start_time = time.time()
 
+                    logger.log('Computing policy...'.format(itr, n_iters, i))
                     reward = self.reward.get_rewards()
                     pi = self.approximate_value_iteration(reward)
 
-                    if self.VERBOSE:
-                        logger.log('Computed policy in {:,.2f} seconds'.format(time.time() - polopt_start_time))
-
-                    start_time = time.time()
+                    logger.log('Computed policy in {:,.2f} seconds'.format(time.time() - polopt_start_time))
 
                     svf_start_time = time.time()
-                    logger.log('\tComputing state visitation frequency (svf)...'.format(iter, n_iters, i))
+                    logger.log('Computing state visitation frequency (svf)...'.format(itr, n_iters, i))
                     mu_exp = self.state_visitation_frequency(pi)
                     logger.log('Computed svf in {:,.2f} seconds'.format(time.time() - svf_start_time))
                     # mu_exp = self.get_expected_state_feature_counts(pi, svf)
@@ -89,9 +82,8 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     log_lik = log_likelihood(pi, self._current_batch)
                     self.log_lik_hist.append(log_lik)
 
-                    if self.VERBOSE:
-                        logger.record_tabular("Gradient (feature diff)", avg_feature_diff)
-                        logger.record_tabular("Negative Log Likelihood", -log_lik)
+                    logger.record_tabular("Gradient (feature diff)", avg_feature_diff)
+                    logger.record_tabular("Negative Log Likelihood", -log_lik)
 
                     logger.log("Optimizing reward...")
 

@@ -60,7 +60,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
-        self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
+        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(zip(self.grad_theta, self.theta))

@@ -1,6 +1,8 @@
 import json
 import logging
 
+import jsonpickle
+
 
 class ConfigManager(object):
     """
@@ -34,7 +36,8 @@ class ConfigManager(object):
             filename = self._json_file
         try:
             with open(filename, 'w') as f:
-                json.dump(self._to_dict(), f, indent=4, sort_keys=True)
+                encoded = jsonpickle.encode(self)
+                f.write(encoded)
         except IOError:
             logging.log(level=logging.ERROR, msg='Must provide a filename if not loading from '
                                                  'config.')

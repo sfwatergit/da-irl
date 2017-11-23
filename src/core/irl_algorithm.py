@@ -87,7 +87,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
            """
         savf = np.zeros((self.nS, self.nA), dtype=np.float32)
-        for trajectory in  self.expert_demos:
+        for trajectory in self.expert_demos:
             for state, action in trajectory:
                 savf[state, action] += 1
 
@@ -137,11 +137,12 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         diff = float("inf")
         t = 0
 
-        while (diff > 1e-2):
+        while (diff > 1e-4):
             Vp = V_pot.copy()
             for a_xy in reversed(self.mdp.A):
                 Vp = softmax(np.hstack(
-                    [Vp, reward[:, a_xy].reshape([-1, 1]) +0.99 * self.mdp.transition_matrix[:, a_xy, :].dot(V)])).reshape(
+                    [Vp,
+                     reward[:, a_xy].reshape([-1, 1]) + 0.99 * self.mdp.transition_matrix[:, a_xy, :].dot(V)])).reshape(
                     -1, 1)
 
             diff = np.amax(abs(Vp - V))
@@ -158,7 +159,6 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         self._MAX_ITER = t
 
-        print(policy)
         return policy.astype(np.float32)
 
     def state_visitation_frequency(self, pi, ent_wt=1.0, discount=1.0):
@@ -181,7 +181,6 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
         return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True)
-
 
     def compute_policy(self, Q, V):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
@@ -230,6 +229,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
     def optimize_reward(self):
         raise NotImplementedError
+
 
 def logsumexp(q, alpha=1.0, axis=1):
     return alpha * sp_lse((1.0 / alpha) * q, axis=axis)

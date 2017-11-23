@@ -13,7 +13,7 @@ class ExpertPersonaAgent(object):
         """
 
         self.persona = Persona(traces=traces, build_profile=True,
-                               config_file=params.profile_builder_config_file_path)
+                               config_file=params.general_params.profile_builder_config_file_path)
         self._pid = self.persona.id
         self._secondary_labels = self.persona.habitat.secondary_site_ids
         self._work_label = self.persona.works

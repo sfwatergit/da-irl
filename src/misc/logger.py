@@ -221,7 +221,7 @@ def save_itr_params(itr, params):
             raise NotImplementedError
 
 
-def log_parameters(log_file, args, classes):
+def log_parameters(log_file, args):
     log_params = {}
     for param_name, param_value in args.__dict__.iteritems():
         if any([param_name.startswith(x) for x in classes.keys()]):

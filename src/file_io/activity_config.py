@@ -1,10 +1,12 @@
+import os.path as osp
+
 from impl.config import ConfigManager
 
 TRUTHY = ["true", 1, "True", "TRUE", "t", "y", "yes"]
 
 
 class IRLConfig(ConfigManager):
-    def __init__(self, data):
+    def __init__(self, data, json_file=None):
         super(IRLConfig, self).__init__()
         self.num_iters = data.pop('num_iters', 10)
         self.energy_level_bins = data.pop('energy_level_bins', 3)
@@ -13,7 +15,7 @@ class IRLConfig(ConfigManager):
 
 
 class ProfileBuilderConfig(ConfigManager):
-    def __init__(self, json_file):
+    def __init__(self, data, json_file=None):
         super(ProfileBuilderConfig, self).__init__(json_file=json_file)
         self.profile_builder_config_file_path = None
         self.segment_minutes = int('15min'.replace('min', ''))
@@ -21,15 +23,25 @@ class ProfileBuilderConfig(ConfigManager):
         self.filter_holidays = False
 
 
-class ATPConfig(ConfigManager):
-    def __init__(self, data):
-        super(ATPConfig, self).__init__()
-        self.general_params = data.pop('generalParams')
-        self.irl_params = IRLConfig(data.pop('irlParams'))
-        self.profile_builder_config_file_path = self.general_params.pop('profile_builder_config_file_path', None)
+class GeneralConfig(ConfigManager):
+    def __init__(self, data, json_file=None):
+        super(GeneralConfig, self).__init__(json_file=json_file)
+        self.root_path = data.pop("root_path", osp.abspath(osp.join(osp.dirname(__file__), '..')))
+        self.log_path = self.root_path + data.pop("log_path", "/data")
+        self.profile_builder_config_file_path = data.pop("profile_builder_config_file_path", "/output")
+        self.reward_dir = data.pop("reward_dir", "/rewards")
+        self.images_dir = data.pop("images_dir", "/images")
+        self.run_id = data.pop("run_id", "test_run")
 
-        self.profile_params = ProfileBuilderConfig(
-            json_file=self.profile_builder_config_file_path)
+
+class ATPConfig(ConfigManager):
+    def __init__(self, data, json_file=None):
+        super(ATPConfig, self).__init__(json_file=json_file)
+        self.general_params = GeneralConfig(data.pop('generalParams'))
+        self.irl_params = IRLConfig(data.pop('irlParams'))
+
+        self.profile_params = ProfileBuilderConfig(data=None,
+                                                   json_file=self.general_params.profile_builder_config_file_path)
 
         self.activity_params = {
             'performing': data.pop('performing', 6.0),
