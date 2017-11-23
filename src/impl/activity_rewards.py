@@ -68,7 +68,6 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.sess.run(tf.global_variables_initializer())
 
 
-
     @staticmethod
     def make_trip_features(env, params):
         return [i(mode, params, env=env) for i in get_subclass_list(TripFeature) for mode in
@@ -90,24 +89,6 @@ class ActivityLinearRewardFunction(RewardFunction):
         self._activity_feature_ixs = range(len(self.activity_features))
         self._trip_feature_ixs = range(len(self.activity_features), len(self.activity_features) +
                                        len(params.travel_params.keys()))
-
-    def _initialize_reward(self, initial_theta):
-        if initial_theta is None:
-            theta_activity = np.random.normal(0.000, 1e-8, size=(1, len(self.activity_features)))
-            theta_travel = np.random.normal(0.0000, 1e-8, size=(1, len(self.trip_features)))
-            self._theta = np.concatenate((theta_activity, theta_travel), axis=1)
-        else:
-            self._theta = initial_theta
-        self.update_reward(self._theta)
-
-    def update_reward(self, theta):
-        r = np.zeros((self._env.nS, self._env.nA))
-        for state in self._env.states.values():
-            for a in state.available_actions:
-                s = state.state_id
-                r[s, a] = np.dot(theta, self.phi(s, a))
-        self._r = r
-
 
     @memoize
     def phi(self, s, a):

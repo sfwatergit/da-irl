@@ -52,7 +52,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         self._MAX_ITER = 0
         self.VERBOSE = verbose
 
-    @lazy_property
+    @property
     def reward(self):
         return self.mdp.reward
 
@@ -192,7 +192,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         """
         state_visitation = np.expand_dims(self.get_start_state_dist(self._current_batch), axis=1)
         sa_visit_t = np.zeros(
-            (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], self._MAX_ITER))
+            (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], T))
 
         for i in range(int(T)):
             sa_visit = state_visitation * pi

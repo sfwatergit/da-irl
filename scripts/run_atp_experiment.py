@@ -9,17 +9,16 @@ import dateutil
 import matplotlib
 import numpy as np
 from swlcommon import TraceLoader
-
-matplotlib.use('macosx')
-import matplotlib.pyplot as plt
-
-plt.interactive(False)
 from algos.maxent_irl import MaxEntIRL
 from file_io.activity_config import ATPConfig
 from impl.activity_env import ActivityEnv
 from impl.persona_population_data import ExpertPersonaAgent
 from misc import logger
 from util.math_utils import create_dir_if_not_exists
+
+matplotlib.use('macosx')
+import matplotlib.pyplot as plt
+plt.interactive(False)
 
 
 def plot_reward(ys, log_dir='', title='', color='b', show=False):

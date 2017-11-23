@@ -57,10 +57,11 @@ class ExpertPersonaAgent(object):
                         prev_state = self.env.states[states[-1]]
                         state = self.env.states[state_ix]
                         s_type = state.state_label
-                        available_actions = [self.env.actions[act] for act in prev_state.available_actions
+                        available_actions = [self.env.actions[act]
+                                             for act in prev_state.available_actions
                                              if (s_type == self.env.actions[act].succ_ix)]
                         if len(available_actions) == 0:
-                            break
+                            available_actions=[self.env.actions[5]]
                         act_ix = available_actions[0].action_id
                         actions.append(act_ix)
                     states.append(state_ix)
