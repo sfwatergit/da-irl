@@ -5,11 +5,11 @@
     "profile_builder_config_file_path": "../data/misc/initial_profile_builder_config.json",
     "reward_dir": "/rewards",
     "images_dir": "/images",
-    "run_id": "multimodal_0"
+    "run_id": "multimodal_1"
 
   },
   "irlParams": {
-    "traces_file_path": "../data/traces/traces_persona_0.csv",
+    "traces_file_path": "../data/traces/traces_persona_1.csv",
     "num_iters": 100,
     "horizon": 1440
   },

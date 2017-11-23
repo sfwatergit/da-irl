@@ -24,7 +24,7 @@ from util.math_utils import create_dir_if_not_exists
 
 def plot_reward(ys, log_dir='', title='', color='b', show=False):
     xs = np.arange(0, len(ys)) * 15 / 60
-    plt.plot(xs, ys, color)
+    plt.plot(xs, -ys, color)
     plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(title.capitalize()))
     plt.xlabel('time (hr)')
     plt.ylabel('marginal utility (utils/hr)')
@@ -48,14 +48,14 @@ def run(config, cache_dir, log_dir):
         minibatch_size=len(expert_agent.trajectories),
         cache_dir=cache_dir)
 
-    traces = TraceLoader.load_traces_from_csv("/Users/sfeygin/PycharmProjects/da-irl/data/traces/traces_persona_1.csv")
-    expert_agent = ExpertPersonaAgent(traces, config, env)
-
-    learning_algorithm.train(
-        expert_agent.trajectories,
-        num_iters,
-        minibatch_size=len(expert_agent.trajectories),
-        cache_dir=cache_dir)
+    # traces = TraceLoader.load_traces_from_csv("/Users/sfeygin/PycharmProjects/da-irl/data/traces/traces_persona_1.csv")
+    # expert_agent = ExpertPersonaAgent(traces, config, env)
+    #
+    # learning_algorithm.train(
+    #     expert_agent.trajectories,
+    #     num_iters,
+    #     minibatch_size=len(expert_agent.trajectories),
+    #     cache_dir=cache_dir)
 
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)

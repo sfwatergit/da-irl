@@ -37,10 +37,10 @@ class DeepMaxEntIRL(MaxEntIRL):
     def esvf(self, p, name="esvf"):
         with ops.name_scope(name, "esvf_pyfunc", [p]) as scope:
             esvf_x = py_func(self.state_visitation_frequency,
-                                          [p],
-                                          [tf.float32],
-                                          name=scope,
-                                          grad=self._ESVFGrad)
+                             [p],
+                             [tf.float32],
+                             name=scope,
+                             grad=self._ESVFGrad)
             return esvf_x[0]
 
     def _ESVFGrad(self, op, grad):

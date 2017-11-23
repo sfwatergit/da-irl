@@ -7,10 +7,10 @@ import time
 
 import numpy as np
 
+from algos.irl_algorithm import BaseMaxEntIRLAlgorithm
 from impl.activity_mdp import ActivityMDP
 from impl.activity_rewards import ActivityLinearRewardFunction
 from misc import logger
-from src.core.irl_algorithm import BaseMaxEntIRLAlgorithm
 
 
 class MaxEntIRL(BaseMaxEntIRLAlgorithm):
@@ -36,9 +36,10 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         self.expert_demos = trajectories
         self._max_path_length = sum(len(path) for path in self.expert_demos)
 
+        # Get expert's demonstrated (empirical) state visitation frequency (normalized)
         mu_D = self.get_empirical_savf()
 
-        self.reward = self.mdp.reward
+        self._reward = self.mdp.reward
 
         start_time = time.time()
         for i in range(n_iter):
@@ -52,34 +53,29 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     iter_start_time = time.time()
                     minibatch = np.random.choice(iter_data_idxs, minibatch_size, False)
                     self._current_batch = iter_data[minibatch]
-                    polopt_start_time = time.time()
 
+                    # Compute the policy using approximate (softmax) value iteration
+                    polopt_start_time = time.time()
                     logger.log('Computing policy...'.format(itr, n_iters, i))
                     reward = self.reward.get_rewards()
                     pi = self.approximate_value_iteration(reward)
-
                     logger.log('Computed policy in {:,.2f} seconds'.format(time.time() - polopt_start_time))
 
+                    # Compute the state visitation occupancy counts
                     svf_start_time = time.time()
-                    logger.log('Computing state visitation frequency (svf)...'.format(itr, n_iters, i))
+                    logger.log('Computing state-action visitation frequency (svf)...'.format(itr, n_iters, i))
                     mu_exp = self.state_visitation_frequency(pi)
-                    logger.log('Computed svf in {:,.2f} seconds'.format(time.time() - svf_start_time))
-                    # mu_exp = self.get_expected_state_feature_counts(pi, svf)
+                    savf = self._compute_savf_from_svf(mu_exp, pi)
+                    logger.log('Computed savf in {:,.2f} seconds'.format(time.time() - svf_start_time))
 
-                    D_sa = np.zeros((self.nS, self.nA), dtype=np.float32)
-                    for s in self.mdp.S:
-                        actions = self.mdp.env.states[s].available_actions
-                        for a in actions:
-                            D_sa[s, a] = pi[s, a] * mu_exp[s]
-
-                    grad_r = mu_D - D_sa
+                    grad_r = -(mu_D - savf)
                     grad_theta, l2_loss, grad_norm = self.reward.apply_grads(grad_r)
-                    avg_feature_diff = np.mean(l2_loss)
+                    avg_feature_diff = np.max(np.abs(grad_theta[0]))
 
                     self.feature_diff.append(grad_norm)
 
                     # Compute log-likelihood
-                    log_lik = log_likelihood(pi, self._current_batch)
+                    log_lik = self._log_likelihood(pi, self._current_batch)
                     self.log_lik_hist.append(log_lik)
 
                     logger.record_tabular("Gradient (feature diff)", avg_feature_diff)
@@ -97,24 +93,3 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     logger.record_tabular('Time', time.time() - start_time)
                     logger.record_tabular('ItrTime', time.time() - iter_start_time)
                     logger.dump_tabular(with_prefix=False)
-
-
-def log_likelihood(pi, examples):
-    ll = 0
-    for example in examples:
-        for s, a in example[:-1]:
-            if pi[s, a] != 0:
-                ll += np.log(pi[s, a])
-    return ll
-
-
-def _expected_utility(mdp, s, a, value):
-    """ The expected utility of performing `a` in `s`, using `value` """
-    return np.sum([p * mdp.gamma * value[s1] for (p, s1) in mdp.T(s, a)])
-
-
-def group_by_iter(n, iterable):
-    row = tuple(next(iterable) for i in range(n))
-    while row:
-        yield row
-        row = tuple(next(iterable) for i in range(n))
