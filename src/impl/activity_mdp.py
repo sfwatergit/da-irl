@@ -91,18 +91,18 @@ class ATPTransition(TransitionFunction):
             if len(ns) > 0:
                 return np.array([(1.0, ns['attr_dict']['state'])])
             else:
-                return np.array([(1.0, self.env.home_state)])
+                return np.array([(1.0, self.env.home_goal_state)])
         else:
             raise ValueError('No resulting state or')
 
 
 class ActivityMDP(MDP):
-    def __init__(self, R, gamma, env):
+    def __init__(self, reward_function, gamma, env):
         T = ATPTransition(env)
-        super(ActivityMDP, self).__init__(R, T, env.G, gamma, env)
+        super(ActivityMDP, self).__init__(reward_function, T, env.G, gamma, env)
         self._env = env
-        self._P = None
-
+        env.transition_matrix = self.transition_matrix
+        env.reward_function = self.reward_function
 
 
     @memoize

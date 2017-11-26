@@ -87,14 +87,14 @@ class TMDPAction(Action):
 
 
 class TMDP(MDP):
-    def __init__(self, reward,
+    def __init__(self, reward_function,
                  transition,
                  horizon,
                  discretization,
                  initial_state,
                  state_types,
                  action_types):
-        super(TMDP, self).__init__(reward, transition, graph=None, gamma=0, env=None)
+        super(TMDP, self).__init__(reward_function, transition, graph=None, gamma=0, env=None)
         self.action_types = action_types
         self._action_dict = dict((v, t) for v, t in enumerate(self.action_types))
         self._actions = None

@@ -228,3 +228,22 @@ def adam(x, dx, config=None):
     next_x = x
 
     return next_x, config
+
+def weighted_sample(weights, objects):
+    """
+    Return a random item from objects, with the weighting defined by weights
+    (which must sum to 1).
+    """
+    # An array of the weights, cumulatively summed.
+    cs = np.cumsum(weights)
+    # Find the index of the first weight over a random value.
+    idx = sum(cs < np.random.rand())
+    return objects[min(idx, len(objects) - 1)]
+
+
+def weighted_sample_n(prob_matrix, items):
+    s = prob_matrix.cumsum(axis=1)
+    r = np.random.rand(prob_matrix.shape[0])
+    k = (s < r.reshape((-1, 1))).sum(axis=1)
+    n_items = len(items)
+    return items[np.minimum(k, n_items - 1)]

@@ -5,6 +5,8 @@ from tqdm import tqdm
 
 from algos.maxent_irl import MaxEntIRL
 from impl.activity_env import ActivityEnv
+from impl.activity_mdp import ActivityMDP
+from impl.activity_rewards import ActivityLinearRewardFunction
 
 
 class ExpertPersonaAgent(object):
@@ -15,7 +17,11 @@ class ExpertPersonaAgent(object):
             persona (Persona): persona representation of traveler.
         """
         self._config = config
+
         self.env = env_type(config=config)
+        R = ActivityLinearRewardFunction(self.env)
+        mdp = ActivityMDP(R, 0.95, self.env)
+
         traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
         self.persona = Persona(traces=traces, build_profile=True,
                                config_file=self._config.general_params.profile_builder_config_file_path)
@@ -23,9 +29,9 @@ class ExpertPersonaAgent(object):
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
-        self._profile = self.persona.get_profile_as_array().T
+        self._profile = self.persona.get_profile_as_array()
         self._trajectories = None
-        self._learning_algorithm = learning_algorithm(self.env, verbose=False)
+        self._learning_algorithm = learning_algorithm(mdp, verbose=False)
 
     @property
     def home_site(self):
@@ -54,6 +60,9 @@ class ExpertPersonaAgent(object):
     def policy(self):
         return self._learning_algorithm.policy
 
+    def evaluate_trajectory(self, trajectory):
+        states = [p[0] for p in trajectory]
+
     def learn_reward(self):
         self._learning_algorithm.train(self.trajectories,
                                        self._config.irl_params.num_iters,
@@ -61,7 +70,7 @@ class ExpertPersonaAgent(object):
 
     def _profile_to_trajectories(self, tmat):
         trajectories = []
-        pbar = tqdm(tmat.T, desc="Converting trajectories to state-actions")
+        pbar = tqdm(tmat, desc="Converting trajectories to state-actions")
         for path in pbar:
             states = []
             actions = []
@@ -83,3 +92,7 @@ class ExpertPersonaAgent(object):
                     states.append(state_ix)
             trajectories.append(np.array(zip(states, actions)))
         return np.array(trajectories)
+
+
+class ExpertPopulation(object):
+    pass

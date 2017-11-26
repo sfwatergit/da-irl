@@ -10,7 +10,7 @@
   },
   "irlParams": {
     "traces_file_path": "../data/traces/traces_persona_0.csv",
-    "num_iters": 100,
+    "num_iters": 200,
     "horizon": 1440
   },
   "filterParams": {

@@ -5,7 +5,7 @@ import sys
 from swlcommon import TraceLoader
 
 from algos.maxent_irl import MaxEntIRL
-from impl.persona_population_data import ExpertPersonaAgent
+from impl.expert_persona import ExpertPersonaAgent
 from misc import logger
 
 sys.path.append('../src')
@@ -86,7 +86,7 @@ def main():
                              cache_dir=cache_dir)
 
     save_run_data(params, map(str,
-                              learning_algorithm.mdp.reward.R.features),
+                              learning_algorithm.mdp.reward_function.R.features),
                   learning_algorithm.feature_diff,
                   learning_algorithm.log_lik_hist, True)
 

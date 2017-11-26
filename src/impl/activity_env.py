@@ -8,7 +8,7 @@ import gym
 import networkx as nx
 from gym.spaces.discrete import Discrete
 from gym.spaces.tuple_space import Tuple
-
+import numpy as np
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 
 num_cores = multiprocessing.cpu_count()
@@ -17,14 +17,17 @@ num_cores = multiprocessing.cpu_count()
 class ActivityEnv(gym.Env):
     def __init__(self, config, *args, **kwargs):
         super(ActivityEnv, self).__init__()
+
         self._config = config
         self.irl_params = self._config.irl_params
         self.segment_mins = self._config.profile_params.segment_minutes
         self._horizon = int(self.irl_params.horizon / self.segment_mins)
-        self.home_act = self._config.home_act
-        self.work_act = self._config.work_act
-        self.shopping_act = self._config.shopping_act
-        self.other_act = self._config.other_act
+        self.home_activity = self._config.home_activity
+        self.work_activity = self._config.work_activity
+        self.shopping_activity = self._config.shopping_activity
+        self.other_activity = self._config.other_activity
+        self.home_start_state = None
+        self.home_goal_state = None
 
         self.activity_types = self._config.activity_params.keys()
         self.travel_modes = self._config.travel_params.keys()
@@ -34,11 +37,13 @@ class ActivityEnv(gym.Env):
 
         self.nS = int(self.nA * self.horizon)
         self.states = {}
-        self.__observation_space = Tuple((self.__actions_space, Discrete(self.horizon)))
 
+        self.__observation_space = Tuple((self.__actions_space, Discrete(self.horizon)))
         self.terminals = []
-        self._transition_probability_matrix = None
+
         self._g = self.build_state_graph()
+        self._transition_matrix = None
+        self._reward_function = None
 
     @property
     def horizon(self):
@@ -56,8 +61,25 @@ class ActivityEnv(gym.Env):
     def observation_space(self):
         return self.__observation_space
 
+    @property
+    def transition_matrix(self):
+        return self._transition_matrix
+
+    @transition_matrix.setter
+    def transition_matrix(self, transition_matrix):
+        self._transition_matrix = transition_matrix
+
+    @property
+    def reward_function(self):
+        return self._reward_function
+
+    @reward_function.setter
+    def reward_function(self, reward_function):
+        self._reward_function = reward_function
+
     def _reset(self):
-        pass
+        self.state = self.home_start_state
+        return self.state.state_id
 
     def _step(self, action):
         """
@@ -68,15 +90,29 @@ class ActivityEnv(gym.Env):
         Returns:
 
         """
-        pass
+        s = self.state.state_id
+        a = action
+        ns = np.flatnonzero(self.transition_matrix[s, a])[0]
 
-    def _reward(self, state):
+        next_state = self.states[ns]
+
+        done = False
+        if next_state in self.terminals:
+            done = True
+
+        self.state = self.states[ns]
+
+        r = self._reward(self.states[ns], action)
+
+        return ns, r, done, {}
+
+    def _reward(self, state, action):
         """
-        r: S->A
+        r: S,A -> \mathbb{R}
         Returns:
 
         """
-        pass
+        return self.reward_function[state.state_id, action.action_id]
 
     def get_legal_actions_for_state(self, el):
         """
@@ -136,22 +172,24 @@ class ActivityEnv(gym.Env):
                     g.add_edge(edge, (ns_el, t + 1), attr_dict={'ix': a})
                 if el in self.activity_types:
                     el_type = ActivityState(state_ix, el, t, self.segment_mins, edge)
+                    if t == 0:
+                        self.home_start_state = el_type
                 elif el in self.travel_modes:
                     el_type = TravelState(state_ix, el, t, self.segment_mins, edge)
                 else:
                     raise ValueError("%s not Found!" % el)
                 if term:
-                    el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
+                    el_type = ActivityState(state_ix, self.home_activity, t, self.segment_mins, edge)
                     self.terminals.append(state_ix)
-                    self.home_state = el_type
-                    g.add_edge(edge, (self.home_act, t + 1), attr_dict={'ix': available_actions[0]})
+                    self.home_goal_state = el_type
+                    g.add_edge(edge, (self.home_activity, t + 1), attr_dict={'ix': available_actions[0]})
                 el_type.available_actions.extend(available_actions)
                 g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
                 self.states[state_ix] = el_type
                 state_ix += 1
 
-        edge = (self.home_state, self.horizon)
-        el_type = ActivityState(state_ix, self.home_act, t, self.segment_mins, edge)
+        edge = (self.home_goal_state, self.horizon)
+        el_type = ActivityState(state_ix, self.home_activity, t, self.segment_mins, edge)
         el_type.available_actions.extend(available_actions)
         g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
         return g
@@ -159,5 +197,5 @@ class ActivityEnv(gym.Env):
     def get_home_action_id(self):
         assert self.actions is not None
         for id, act in self.actions.items():
-            if self.home_act == act.succ_ix:
+            if self.home_activity == act.succ_ix:
                 return id

@@ -8,16 +8,15 @@ import uuid
 import dateutil
 import matplotlib
 import numpy as np
-from swlcommon import TraceLoader
-from algos.maxent_irl import MaxEntIRL
+
 from file_io.activity_config import ATPConfig
-from impl.activity_env import ActivityEnv
-from impl.persona_population_data import ExpertPersonaAgent
+from impl.expert_persona import ExpertPersonaAgent
 from misc import logger
 from util.math_utils import create_dir_if_not_exists
 
 matplotlib.use('macosx')
 import matplotlib.pyplot as plt
+
 plt.interactive(False)
 
 
@@ -36,7 +35,9 @@ def plot_reward(ys, log_dir='', title='', color='b', show=False):
 def run(config, log_dir):
     expert_agent = ExpertPersonaAgent(config)
     expert_agent.learn_reward()
-
+    plt.imshow(expert_agent.reward.get_rewards(), aspect='auto')
+    plt.savefig(log_dir + '/reward')
+    plt.clf()
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
 
@@ -85,6 +86,8 @@ if __name__ == '__main__':
                         help='Whether to plot the iteration results')
     parser.add_argument('--log_tabular_only', type=ast.literal_eval, default=False,
                         help='Whether to only print the tabular log information (in a horizontal format)')
+    parser.add_argument('--resume_from', type=str, default=None,
+                        help='Name of the pickle file to resume experiment from.')
 
     parser.add_argument('--seed', type=int,
                         help='Random seed for numpy')
@@ -111,10 +114,11 @@ if __name__ == '__main__':
 
     logger.add_text_output(text_log_file)
     logger.add_tabular_output(tabular_log_file)
+    logger.set_snapshot_mode(args.snapshot_mode)
     prev_snapshot_dir = logger.get_snapshot_dir()
     prev_mode = logger.get_snapshot_mode()
 
-    logger.set_snapshot_dir(log_dir)
+    logger.set_snapshot_dir(prev_snapshot_dir)
     logger.set_log_tabular_only(args.log_tabular_only)
     logger.push_prefix("[%s] " % exp_name)
 

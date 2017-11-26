@@ -64,10 +64,10 @@ class ATPConfig(ConfigManager):
                 'type': activity_type_params.pop('type', 'other')
             }
 
-        self.home_act = self.find_act_type_name('home')
-        self.work_act = self.find_act_type_name('work')
-        self.shopping_act = self.find_act_type_name('shopping')
-        self.other_act = self.find_act_type_name('other')
+        self.home_activity = self.find_activity_type_name('home')
+        self.work_activity = self.find_activity_type_name('work')
+        self.shopping_activity = self.find_activity_type_name('shopping')
+        self.other_activity = self.find_activity_type_name('other')
 
         self.travel_params = {
             'utilityOfLineSwitch': data.pop('utilityOfLineSwitch', -3.0),
@@ -81,7 +81,7 @@ class ATPConfig(ConfigManager):
                 'marginalUtilityOfDistance_util_m': mode_type_params.pop('marginalUtilityOfDistance_util_m', 0.0),
                 'marginalUtilityOfTraveling_util_hr': mode_type_params.pop('marginalUtilityOfTraveling_util_hr', -6.0)}
 
-    def find_act_type_name(self, act_type):
+    def find_activity_type_name(self, act_type):
         # type: (str, dict) -> str
         for act_name, params in self.activity_params.items():
             if params['type'] == act_type:

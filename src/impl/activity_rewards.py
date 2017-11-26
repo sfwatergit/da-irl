@@ -3,7 +3,7 @@ import tensorflow as tf
 from cytoolz import memoize
 
 from impl.activity_env import ActivityEnv
-from models.architectures import make_fc_net
+from models.architectures import fc_net
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
 from util.math_utils import get_subclass_list, cartesian
@@ -45,7 +45,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.input_ph = tf.placeholder(tf.float32, shape=[None, self.input_size], name='dim_ss')
 
         with tf.variable_scope(self.name):
-            reward = make_fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim)
+            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim)
         self.theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
 
         self.reward = reward
@@ -76,7 +76,7 @@ class ActivityLinearRewardFunction(RewardFunction):
     @staticmethod
     def make_activity_features(env, params):
         activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
-        acts = [env.home_act, env.work_act, env.shopping_act]
+        acts = [env.home_activity, env.work_activity, env.shopping_activity]
         time_range = np.arange(0, env.horizon * env.segment_mins, env.segment_mins)
         prod = cartesian([acts, time_range])
         act_at_x_features = [create_act_at_x_features(where, when, env.segment_mins, params)(env=env)
@@ -119,13 +119,3 @@ class ActivityLinearRewardFunction(RewardFunction):
         feed_dict = {self.input_ph: self.feature_matrix.reshape([-1, self.dim_ss])}
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self._env.nS,self._env.nA])
-
-
-class ActivityNNReward(ActivityLinearRewardFunction):
-    def __init__(self, env=None, rmax=1.0, initial_theta=None):
-        super(ActivityNNReward, self).__init__(env, rmax, initial_theta)
-
-    def __call__(self, state, action):
-        feed_dict = {self.input_ph: self.feature_matrix.T[state, action]}
-        with tf.get_default_session() as sess:
-            sess.run(self.reward, feed_dict=feed_dict)

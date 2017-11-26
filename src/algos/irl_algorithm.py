@@ -7,7 +7,6 @@ import six
 from algos.base import IRLAlgorithm
 from misc import logger
 from util.math_utils import softmax
-from util.misc_utils import lazy_property
 
 INF = np.nan_to_num([1 * float("-inf")])
 
@@ -42,7 +41,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         self.expert_demos = None
         self._current_batch = None
-        self._dim_ss = mdp.reward.dim_ss
+        self._dim_ss = mdp.reward_function.dim_ss
         self._total_num_paths = None
         self._max_path_length = 0
 
@@ -54,11 +53,11 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
     @property
     def reward(self):
-        return self.mdp.reward
+        return self.mdp.reward_function
 
-    @lazy_property
+    @property
     def policy(self):
-        return self.policy
+        return self._policy
 
     def get_start_state_dist(self, paths):
         """
@@ -178,7 +177,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         return pi.astype(np.float32)
 
-    def state_visitation_frequency(self, pi, T=100):
+    def state_visitation_frequency(self, T=100):
         """
         Given the policy estimated at this iteration, computes the frequency with which a state is visited.
 
@@ -195,7 +194,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], T))
 
         for i in range(int(T)):
-            sa_visit = state_visitation * pi
+            sa_visit = state_visitation * self.policy
             sa_visit_t[:, :, i] = sa_visit  # (discount**i) * sa_visit
             # sum-out (SA)S
             new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
@@ -222,7 +221,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         """
         return self.policy[np.random.choice(self.mdp.actions(s_t), replace=False)]
 
-    def _compute_savf_from_svf(self, mu_exp, pi):
+    def _compute_savf_from_svf(self, mu_exp):
         """
         Compute estimated state-action visitation frequency from state visitation frequency
 
@@ -238,7 +237,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         for s in self.mdp.S:
             actions = self.mdp.env.states[s].available_actions
             for a in actions:
-                D_sa[s, a] = pi[s, a] * mu_exp[s]
+                D_sa[s, a] = self.policy[s, a] * mu_exp[s]
         return D_sa
 
     @staticmethod
@@ -252,8 +251,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         assert np.all(np.isclose(np.sum(pol_probs, axis=1), 1.0)), str(pol_probs)
         return pol_probs
 
-    @staticmethod
-    def _log_likelihood(pi, demos):
+    def _log_likelihood(self, demos):
         """
         Compute the log-likelihood of policy evaluated over trajectories
 
@@ -264,12 +262,4 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         Returns:
             (float): log-likelihood value
         """
-        ll = 0
-        for example in demos:
-            for s, a in example[:-1]:
-                if pi[s, a] != 0:
-                    ll += np.log(pi[s, a])
-        return ll
-
-
-
+        return np.sum([np.sum([np.log(self.policy[s, a]) for s, a in example]) for example in demos])

@@ -20,13 +20,14 @@ from cytoolz import memoize
 
 
 class MDP(six.with_metaclass(ABCMeta)):
-    def __init__(self, reward, transition, graph, gamma, env, terminals=None):
+    def __init__(self, reward_function, transition, graph, gamma, env, terminals=None):
         self._G = graph
-        self._reward = reward
+        self._reward_function = reward_function
         self._transition = transition
         self._gamma = gamma
         self._env = env
         self._terminals = terminals
+        self._P = None
 
     @property
     def env(self):
@@ -48,8 +49,8 @@ class MDP(six.with_metaclass(ABCMeta)):
         raise NotImplementedError
 
     @property
-    def reward(self):
-        return self._reward
+    def reward_function(self):
+        return self._reward_function
 
     @property
     def gamma(self):
@@ -64,7 +65,7 @@ class MDP(six.with_metaclass(ABCMeta)):
 
     @memoize
     def R(self, state, action):
-        return self._reward(state, action)
+        return self._reward_function(state, action)
 
     @memoize
     def T(self, state, action):
