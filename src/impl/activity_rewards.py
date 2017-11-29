@@ -3,10 +3,10 @@ import tensorflow as tf
 from cytoolz import memoize
 
 from impl.activity_env import ActivityEnv
-from models.architectures import fc_net
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
 from util.math_utils import get_subclass_list, cartesian
+from util.tf_utils import fc_net
 
 
 class ActivityLinearRewardFunction(RewardFunction):
@@ -23,8 +23,6 @@ class ActivityLinearRewardFunction(RewardFunction):
         self._make_indices(params)
         super(ActivityLinearRewardFunction, self).__init__(self.activity_features + self.trip_features, env, rmax,
                                                            initial_weights=initial_theta)
-
-        self.sess = tf.Session()
 
         if nn_params is None:
             nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
@@ -45,7 +43,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.input_ph = tf.placeholder(tf.float32, shape=[None, self.input_size], name='dim_ss')
 
         with tf.variable_scope(self.name):
-            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim)
+            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim, out_act=tf.nn.elu, init=initial_theta)
         self.theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
 
         self.reward = reward
@@ -57,16 +55,15 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
         self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
 
-        self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
+        self.grad_theta = tf.gradients(self.reward, self.theta, self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
         # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(zip(self.grad_theta, self.theta))
-
+        self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
-
 
     @staticmethod
     def make_trip_features(env, params):
@@ -118,4 +115,4 @@ class ActivityLinearRewardFunction(RewardFunction):
     def get_rewards(self):
         feed_dict = {self.input_ph: self.feature_matrix.reshape([-1, self.dim_ss])}
         rewards = self.sess.run(self.reward, feed_dict)
-        return rewards.reshape([self._env.nS,self._env.nA])
+        return rewards.reshape([self._env.nS, self._env.nA])

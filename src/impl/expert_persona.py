@@ -10,7 +10,7 @@ from impl.activity_rewards import ActivityLinearRewardFunction
 
 
 class ExpertPersonaAgent(object):
-    def __init__(self, config, env_type=ActivityEnv, learning_algorithm=MaxEntIRL):
+    def __init__(self, config, persona = None, env_type=ActivityEnv, learning_algorithm=MaxEntIRL, initial_theta=None):
         """PersonaAgent representation. To be used in IRLAgent.
 
         Args:
@@ -19,12 +19,16 @@ class ExpertPersonaAgent(object):
         self._config = config
 
         self.env = env_type(config=config)
-        R = ActivityLinearRewardFunction(self.env)
+        R = ActivityLinearRewardFunction(self.env, initial_theta=initial_theta)
         mdp = ActivityMDP(R, 0.95, self.env)
 
-        traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
-        self.persona = Persona(traces=traces, build_profile=True,
+        if persona is None:
+            traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
+            self.persona = Persona(traces=traces, build_profile=True,
                                config_file=self._config.general_params.profile_builder_config_file_path)
+        else:
+            self.persona = persona
+
         self._pid = self.persona.id
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
@@ -93,6 +97,3 @@ class ExpertPersonaAgent(object):
             trajectories.append(np.array(zip(states, actions)))
         return np.array(trajectories)
 
-
-class ExpertPopulation(object):
-    pass

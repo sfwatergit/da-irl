@@ -42,7 +42,7 @@ class ATPAction(Action):
         return self._succ_ix
 
     def __eq__(self, other):
-        return self._action_id == other.state_id
+        return self._action_id == other.action_id
 
     def __hash__(self):
         return self.action_id.__hash__()

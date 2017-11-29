@@ -23,6 +23,19 @@ def to_onehot_n(inds, dim):
     return ret
 
 
+def from_onehot(v):
+    return np.nonzero(v)[0][0]
+
+
+def from_onehot_n(v):
+    if len(v) == 0:
+        return []
+    return np.nonzero(v)[1]
+
+def flatten_list(lol):
+    return [a for b in lol for a in b]
+
+
 def make_time_string(mm):
     # type: (int) -> unicode
     """
@@ -228,6 +241,7 @@ def adam(x, dx, config=None):
     next_x = x
 
     return next_x, config
+
 
 def weighted_sample(weights, objects):
     """

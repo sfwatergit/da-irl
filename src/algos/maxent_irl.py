@@ -15,7 +15,6 @@ from misc import logger
 
 class MaxEntIRL(BaseMaxEntIRLAlgorithm):
     def __init__(self, mdp,
-                 reward_prior=None,
                  policy_prior=None,
                  load=False,
                  filepath=None,
@@ -25,9 +24,9 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         self.tol = avi_tol
         self.load = load
         self.filepath = filepath
-        BaseMaxEntIRLAlgorithm.__init__(self, mdp, reward_prior, policy_prior, verbose)
+        BaseMaxEntIRLAlgorithm.__init__(self, mdp, policy_prior, verbose)
 
-    def train(self, trajectories, epochs=1, minibatch_size=1, reg=0.01, cache_dir=None):
+    def train(self, trajectories, epochs=1, minibatch_size=1):
 
         self.expert_demos = trajectories
         self._max_path_length = sum(len(path) for path in self.expert_demos)
@@ -71,7 +70,7 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     self.feature_diff.append(grad_norm)
 
                     # Compute log-likelihood
-                    log_lik = self._log_likelihood(self._current_batch)
+                    log_lik = self._log_likelihood(self.expert_demos)
                     self.log_lik_hist.append(log_lik)
 
                     logger.record_tabular("Gradient (feature diff)", avg_feature_diff)
@@ -81,9 +80,6 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
 
                     theta = self.reward.get_theta()
                     self.theta_hist.append(theta.T)
-
-                    if self.VERBOSE:
-                        print(theta)
 
                     # self.mdp.reward.update_reward()
                     logger.record_tabular('Time', time.time() - start_time)

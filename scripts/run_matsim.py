@@ -11,7 +11,7 @@ from misc import logger
 sys.path.append('../src')
 sys.path.append('../')
 
-from file_io.activity_config import ATPConfig
+from impl.activity_config import ATPConfig
 from impl.activity_env import ActivityEnv
 from util.math_utils import create_dir_if_not_exists
 

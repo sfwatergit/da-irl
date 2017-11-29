@@ -1,23 +1,27 @@
 from __future__ import print_function
 
+import base64
+import csv
+import datetime
 import inspect
-
-from contextlib import contextmanager
+import json
 import os
 import os.path as osp
 import sys
-import datetime
-import dateutil.tz
-import csv
-import joblib
-import json
+from contextlib import contextmanager
 from pickle import loads
-import base64
+import random
+
+import dateutil.tz
+import joblib
+import tensorflow as tf
+import numpy as np
 
 from misc.autoargs import get_all_parameters
 from misc.console import mkdir_p
 from misc.serializable import Serializable
 from misc.tabulate import tabulate
+from util.math_utils import create_dir_if_not_exists
 
 _prefixes = []
 _prefix_str = ''
@@ -81,6 +85,7 @@ def remove_tabular_output(file_name):
 
 def set_snapshot_dir(dir_name):
     global _snapshot_dir
+    create_dir_if_not_exists(dir_name)
     _snapshot_dir = dir_name
 
 

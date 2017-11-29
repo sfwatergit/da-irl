@@ -23,7 +23,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
            Twenty-Second Conference on Artificial Intelligence (AAAI), 1433–1438.
        """
 
-    def __init__(self, mdp, reward_prior=None, policy_prior=None, verbose=False):
+    def __init__(self, mdp, policy_prior=None, verbose=False):
         """
 
         Args:
@@ -37,7 +37,6 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         # what we want to learn
         self._policy = policy_prior
-        self._reward = reward_prior
 
         self.expert_demos = None
         self._current_batch = None
@@ -177,29 +176,29 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         return pi.astype(np.float32)
 
-    def state_visitation_frequency(self, T=100):
+    def state_visitation_frequency(self):
         """
         Given the policy estimated at this iteration, computes the frequency with which a state is visited.
 
         Args:
-            pi (np.ndarray): N x A policy
+            pi (np.ndarray): S x A policy
             T (int): Time horizon (optional)
 
         Returns:
-            (np.ndarray): state visitation distribution
+            (np.ndarray): S x 1 state visitation distribution
 
         """
         state_visitation = np.expand_dims(self.get_start_state_dist(self._current_batch), axis=1)
         sa_visit_t = np.zeros(
-            (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], T))
+            (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], self.mdp.env.horizon))
 
-        for i in range(int(T)):
+        for i in range(int(self.mdp.env.horizon)):
             sa_visit = state_visitation * self.policy
             sa_visit_t[:, :, i] = sa_visit  # (discount**i) * sa_visit
             # sum-out (SA)S
             new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True) / T
+        return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True) / self.mdp.env.horizon
 
     def train(self, trajectories):
         raise NotImplementedError
