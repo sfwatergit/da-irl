@@ -156,7 +156,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         diff = float("inf")
         t = 0
 
-        while diff > 1e-2 or not t > T:
+        while diff > 1e-4 or not t > T:
             Vp = V_pot.copy()
             for a_xy in reversed(self.mdp.A):
                 Vp = softmax(np.hstack([Vp, reward[:, a_xy].reshape([-1, 1]) +
