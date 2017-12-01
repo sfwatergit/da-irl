@@ -53,7 +53,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
         self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
 
-        self.grad_theta = tf.gradients(self.reward, self.theta, self.grad_r)
+        self.grad_theta = tf.gradients(self.reward, self.theta, - self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
         # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)

@@ -61,7 +61,8 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     savf = self._compute_savf_from_svf(mu_exp)
                     logger.log('Computed savf in {:,.2f} seconds'.format(time.time() - svf_start_time))
 
-                    grad_r = -(mu_D - savf)
+                    grad_r = mu_D - savf
+
                     grad_theta, l2_loss, grad_norm = self.reward.apply_grads(grad_r)
                     avg_feature_diff = np.max(np.abs(grad_theta[0]))
 

@@ -28,7 +28,7 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
-        self._profile = np.array(self.persona.get_activity_blanket_as_array(),dtype='S16').T
+        self._profile = np.array(self.persona.get_activity_blanket_as_array(),dtype='S16')
         self._trajectories = None
 
 

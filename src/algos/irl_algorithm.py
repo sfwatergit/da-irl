@@ -198,7 +198,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             # sum-out (SA)S
             new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum((np.sum(sa_visit_t, axis=2) / self.mdp.env.horizon), 1)
+        return np.sum(np.sum(sa_visit_t, axis=2), axis=1)
 
     def train(self, trajectories):
         raise NotImplementedError

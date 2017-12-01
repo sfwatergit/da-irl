@@ -55,7 +55,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
             })
             print(loss)
 
-    def state_visitation_frequency(self):
+    def state_action_visitation_frequency(self):
         if self.use_amn_policy:
             transition_matrix = self.mdp.transition_matrix
             T = self.env.horizon
@@ -76,7 +76,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
             self.use_amn_policy = False
             mu_exp = np.sum(mu, 1)
         else:
-            mu_exp = super(MaxEntIRL, self).state_visitation_frequency()
+            mu_exp = super(MaxEntIRL, self).state_action_visitation_frequency()
         return mu_exp
 
     def legal_actions(self, obs):
