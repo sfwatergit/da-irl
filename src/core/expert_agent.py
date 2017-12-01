@@ -1,8 +1,8 @@
 from abc import abstractproperty
 
-from algos.maxent_irl import MaxEntIRL
-from impl.activity_config import ATPConfig
-from impl.activity_env import ActivityEnv
+from src.algos.maxent_irl import MaxEntIRL
+from src.impl.activity_config import ATPConfig
+from src.impl.activity_env import ActivityEnv
 
 
 class ExpertAgent(object):

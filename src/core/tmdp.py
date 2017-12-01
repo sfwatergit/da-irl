@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import *
 
 from src.core.mdp import State, Action, MDP, TransitionFunction
-from util.math_utils import make_time_string, t2n, softmax
+from src.util.math_utils import make_time_string, t2n, softmax
 
 ABS = 0
 REL = 1

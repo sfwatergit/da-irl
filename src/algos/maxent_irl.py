@@ -7,10 +7,8 @@ import time
 
 import numpy as np
 
-from algos.irl_algorithm import BaseMaxEntIRLAlgorithm
-from impl.activity_mdp import ActivityMDP
-from impl.activity_rewards import ActivityLinearRewardFunction
-from misc import logger
+from src.algos.irl_algorithm import BaseMaxEntIRLAlgorithm
+from src.misc import logger
 
 
 class MaxEntIRL(BaseMaxEntIRLAlgorithm):

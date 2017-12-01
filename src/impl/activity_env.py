@@ -11,12 +11,10 @@ from gym.spaces import MultiDiscrete
 from gym.spaces.discrete import Discrete
 
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
-from util.math_utils import to_onehot
+from src.util.math_utils import to_onehot
 
 num_cores = multiprocessing.cpu_count()
 
-def make_atp_env(env_id):
-    env = gym.make()
 
 class ActivityEnv(gym.Env):
     def __init__(self, config, *args, **kwargs):

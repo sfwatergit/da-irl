@@ -4,9 +4,9 @@ from abc import ABCMeta
 import numpy as np
 import six
 
-from algos.base import IRLAlgorithm
-from misc import logger
-from util.math_utils import softmax
+from src.algos.base import IRLAlgorithm
+from src.misc import logger
+from src.util.math_utils import softmax
 
 INF = np.nan_to_num([1 * float("-inf")])
 

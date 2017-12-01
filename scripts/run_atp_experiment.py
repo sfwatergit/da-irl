@@ -21,11 +21,11 @@ import dateutil
 import matplotlib
 import numpy as np
 
-from impl.activity_config import ATPConfig
-from impl.parallel.parallel_population import SubProcVecExpAgent
-from misc import logger
-from util.math_utils import create_dir_if_not_exists
-from util.misc_utils import set_global_seeds, get_trace_fnames
+from src.impl.activity_config import ATPConfig
+from src.impl.parallel.parallel_population import SubProcVecExpAgent
+from src.misc import logger
+from src.util.math_utils import create_dir_if_not_exists
+from src.util.misc_utils import set_global_seeds, get_trace_fnames
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
@@ -61,12 +61,12 @@ def run(config, log_dir):
     from swlcommon import Persona, TraceLoader
 
     # da-irl
-    from algos.actor_mimic import ATPActorMimicIRL
-    from algos.maxent_irl import MaxEntIRL
-    from impl.activity_env import ActivityEnv
-    from impl.activity_mdp import ActivityMDP
-    from impl.activity_rewards import ActivityLinearRewardFunction
-    from impl.expert_persona import ExpertPersonaAgent
+    from src.algos.actor_mimic import ATPActorMimicIRL
+    from src.algos.maxent_irl import MaxEntIRL
+    from src.impl.activity_env import ActivityEnv
+    from src.impl.activity_mdp import ActivityMDP
+    from src.impl.activity_rewards import ActivityLinearRewardFunction
+    from src.impl.expert_persona import ExpertPersonaAgent
 
     ncpu = multiprocessing.cpu_count()
     if platform.system() == 'Darwin': ncpu //= 2
@@ -170,7 +170,9 @@ if __name__ == '__main__':
 
     args, unparsed = parser.parse_known_args()
 
-    with open(args.config) as fp:
+    root_dir = osp.dirname(osp.abspath(__file__))
+    config_file = osp.join(root_dir,args.config)
+    with open(config_file) as fp:
         config = ATPConfig(data=json.load(fp), json_file=args.config)
         # TODO: This is a hacky way to combine file-based and cli config params... fix this!
         config._to_dict().update(args.__dict__)
@@ -179,10 +181,9 @@ if __name__ == '__main__':
         # set_seed(args.seed)
 
 
-    config_file = "../data/misc/initial_profile_builder_config.json"
-
     default_log_dir = config.general_params.log_path
     exp_name = config.general_params.run_id + default_exp_name
+
     log_dir = osp.join(default_log_dir, exp_name)
 
     tabular_log_file = osp.join(log_dir, config.tabular_log_file)

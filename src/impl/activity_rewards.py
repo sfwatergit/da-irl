@@ -1,11 +1,11 @@
 import numpy as np
 import tensorflow as tf
 from cytoolz import memoize
-from impl.activity_env import ActivityEnv
+from src.impl.activity_env import ActivityEnv
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
-from util.math_utils import get_subclass_list, cartesian
-from util.tf_utils import fc_net
+from src.util.math_utils import get_subclass_list, cartesian
+from src.util.tf_utils import fc_net
 
 
 class ActivityLinearRewardFunction(RewardFunction):

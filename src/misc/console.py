@@ -41,7 +41,7 @@ def mkdir_p(path):
 
 
 def log(s):  # , send_telegram=False):
-    print s
+    print(s)
     sys.stdout.flush()
 
 
@@ -52,7 +52,7 @@ class SimpleMessage(object):
         self.logger = logger
 
     def __enter__(self):
-        print self.msg
+        print(self.msg)
         self.tstart = time.time()
 
     def __exit__(self, etype, *args):

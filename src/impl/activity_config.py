@@ -1,6 +1,6 @@
 import os.path as osp
 
-from misc.config import ConfigManager
+from src.misc.config import ConfigManager
 
 TRUTHY = ["true", 1, "True", "TRUE", "t", "y", "yes"]
 
@@ -28,7 +28,7 @@ class GeneralConfig(ConfigManager):
         super(GeneralConfig, self).__init__(json_file=json_file)
         self.root_path = data.pop("root_path", osp.abspath(osp.join(osp.dirname(__file__), '..')))
         self.log_path = self.root_path + data.pop("log_path", "/data")
-        self.profile_builder_config_file_path = data.pop("profile_builder_config_file_path", "/output")
+        self.profile_builder_config_file_path = osp.join(self.root_path,data.pop("profile_builder_config_file_path", "/output"))
         self.reward_dir = data.pop("reward_dir", "/rewards")
         self.images_dir = data.pop("images_dir", "/images")
         self.run_id = data.pop("run_id", "test_run")

@@ -10,17 +10,14 @@ import os.path as osp
 import sys
 from contextlib import contextmanager
 from pickle import loads
-import random
 
 import dateutil.tz
 import joblib
-import tensorflow as tf
-import numpy as np
 
-from misc.console import mkdir_p
-from misc.serializable import Serializable
-from misc.tabulate import tabulate
-from util.math_utils import create_dir_if_not_exists
+from src.misc.console import mkdir_p
+from src.misc.serializable import Serializable
+from src.misc.tabulate import tabulate
+from src.util.math_utils import create_dir_if_not_exists
 
 _prefixes = []
 _prefix_str = ''

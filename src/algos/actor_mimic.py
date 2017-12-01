@@ -4,9 +4,9 @@ import numpy as np
 import six
 import tensorflow as tf
 
-from algos.maxent_irl import MaxEntIRL
+from src.algos.maxent_irl import MaxEntIRL
 from src.util.math_utils import from_onehot_n, from_onehot
-from util.tf_utils import fc_net
+from src.util.tf_utils import fc_net
 
 EPSILON = 0.5
 

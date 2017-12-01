@@ -6,10 +6,10 @@ from swlcommon import TraceLoader
 from swlcommon.personatrainer.persona import Persona
 from tqdm import tqdm
 
-from algos.maxent_irl import MaxEntIRL
-from core.expert_agent import ExpertAgent
-from impl.activity_config import ATPConfig
-from impl.activity_env import ActivityEnv
+from src.algos.maxent_irl import MaxEntIRL
+from src.core.expert_agent import ExpertAgent
+from src.impl.activity_config import ATPConfig
+from src.impl.activity_env import ActivityEnv
 
 
 class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
@@ -28,7 +28,7 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
-        self._profile = self.persona.get_profile_as_array()
+        self._profile = np.array(self.persona.get_activity_blanket_as_array(),dtype='S16').T
         self._trajectories = None
 
 
