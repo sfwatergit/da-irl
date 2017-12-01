@@ -100,15 +100,15 @@ def run(config, log_dir):
                    izip(expert_agent.get_policy(), expert_agent.get_rewards(), expert_agent.get_theta())]
 
     init_theta = np.mean(np.array([expert_data[0]['theta'], expert_data[1]['theta']]), 0).reshape(-1, 1)
-    mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env, initial_theta=init_theta), 0.99, activity_env)
-
-    model = ATPActorMimicIRL(mdp, expert_data)
-
-    dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp))
-
-    for i in range(30):
-        model.train_amn()
-    model.train(dummy_expert.trajectories)
+    # mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env, initial_theta=init_theta), 0.99, activity_env)
+    #
+    # model = ATPActorMimicIRL(mdp, expert_data)
+    #
+    # dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp))
+    #
+    # for i in range(30):
+    #     model.train_amn()
+    # model.train(dummy_expert.trajectories)
 
     plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')
@@ -116,7 +116,7 @@ def run(config, log_dir):
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
 
-    theta = expert_data[0]['theta'][0]
+    theta = init_theta
     home_feats = theta[4:96]
     work_feats = theta[98:192]
     other_feats = theta[193:-4]
