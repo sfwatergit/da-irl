@@ -100,6 +100,7 @@ def run(config, log_dir):
                    izip(expert_agent.get_policy(), expert_agent.get_rewards(), expert_agent.get_theta())]
 
     init_theta = np.mean(np.array([expert_data[0]['theta'], expert_data[1]['theta']]), 0).reshape(-1, 1)
+
     # mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env, initial_theta=init_theta), 0.99, activity_env)
     #
     # model = ATPActorMimicIRL(mdp, expert_data)

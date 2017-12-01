@@ -1,5 +1,11 @@
 # Daily Activity IRL (DA-IRL)
 
+**NOTICE**: _This repository is currently in pre-alpha testing and should not be used in production for any purpose, as it is subject
+to change rapidly and without backwards compatibility. There are additional dependencies that have not yet been
+made public as well._ 
+
+_This code is currently provided mainly for research purposes and ongoing work with collaborators._
+
 ## Overview:
 
 This repository uses inverse reinforcement learning
@@ -21,10 +27,11 @@ a new environment for this project and then do:
 
     pip install -r requirements.txt
 
-To execute the script,  
+To execute the test script  
 
-python scripts/run_atp_experiment.py --config=data/misc/IRL_multimodal_scenario_params.json --traces_dir=<traces> --seed=1
+    python scripts/run_atp_experiment.py --config=data/misc/IRL_multimodal_scenario_params.json --traces_dir=<TRACES> --seed=1
 
+where `<TRACES>` is a directory of persona trace files ending in .csv.
 
 ## References
 
