@@ -38,14 +38,11 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         start_time = time.time()
         for epoch in range(epochs):
             iter_data = self.expert_demos
-            iter_data_idxs = np.arange(0, len(iter_data))
             n_iters = int(float(len(iter_data) / minibatch_size))
             for itr in range(n_iters):
                 logger.record_tabular("Iteration", epoch)
                 with logger.prefix("itr #%d:%d| " % (epoch, itr + 1)):
                     iter_start_time = time.time()
-                    minibatch = np.random.choice(iter_data_idxs, minibatch_size, False)
-                    self._current_batch = iter_data[minibatch]
 
                     # Compute the policy using approximate (softmax) value iteration
                     polopt_start_time = time.time()

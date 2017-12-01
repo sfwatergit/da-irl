@@ -156,7 +156,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         diff = float("inf")
         t = 0
 
-        while diff > 1e-4 or not t > T:
+        while diff > 1e-2 or not t > T:
             Vp = V_pot.copy()
             for a_xy in reversed(self.mdp.A):
                 Vp = softmax(np.hstack([Vp, reward[:, a_xy].reshape([-1, 1]) +
@@ -188,7 +188,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             (np.ndarray): S x 1 state visitation distribution
 
         """
-        state_visitation = np.expand_dims(self.get_start_state_dist(self._current_batch), axis=1)
+        state_visitation = np.expand_dims(self.get_start_state_dist(self.expert_demos), axis=1)
         sa_visit_t = np.zeros(
             (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], self.mdp.env.horizon))
 
