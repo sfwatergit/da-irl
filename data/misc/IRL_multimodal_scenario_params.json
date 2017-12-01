@@ -1,12 +1,10 @@
 {
   "generalParams": {
-    "root_path": "/Users/sfeygin/PycharmProjects/da-irl",
     "log_path": "/data/logs/",
     "profile_builder_config_file_path": "../data/misc/initial_profile_builder_config.json",
     "reward_dir": "/rewards",
     "images_dir": "/images",
     "run_id": "multimodal_1"
-
   },
   "irlParams": {
     "traces_file_path": "../data/traces/traces_persona_1.csv",
