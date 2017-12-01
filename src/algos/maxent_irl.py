@@ -32,6 +32,7 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         # Get expert's demonstrated (empirical) state visitation frequency (normalized)
         mu_D = self.get_empirical_savf()
 
+        # XXXX: Unfortunately have to do this here due to complexity of MDP def... maybe create a MDP\R class?
         self._reward = self.mdp.reward_function
 
         start_time = time.time()
