@@ -19,7 +19,7 @@ It is assumed that you are have a method to extract daily activity-travel sequen
 Place traces for individual agents into a directory. 
 
 ### Running
-Compatible w/ Python 2.7. 
+Compatible w/ Python 2 and 3.
 
 The recommended and only currently supported installation method assumes you have the 
 anaconda python scientific computing framework installed on your machine. Create
@@ -31,12 +31,14 @@ To execute the test script
 
     python scripts/run_atp_experiment.py --config=data/misc/IRL_multimodal_scenario_params.json --traces_dir=<TRACES> --seed=1
 
-where `<TRACES>` is a directory of persona trace files ending in .csv.
+where `<TRACES>` is a directory of persona trace files each ending in .csv.
 
 ## References
 
 
 ## Citation
+
+ You may use the following BibTeX entry to cite this work in a publication (**TO BE UPDATED**):
 
 ```
 @article{Feygin2017dairl,
