@@ -133,7 +133,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         return feature_expectations / len(self.expert_demos)
 
-    def approximate_value_iteration(self, reward, gamma=0.99, T=100):
+    def approximate_value_iteration(self, reward, T=100):
         """
         Computes maximum entropy policy given current reward function and horizon
         via softmax value iteration.
@@ -160,7 +160,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             Vp = V_pot.copy()
             for a_xy in reversed(self.mdp.A):
                 Vp = softmax(np.hstack([Vp, reward[:, a_xy].reshape([-1, 1]) +
-                                        gamma * self.mdp.transition_matrix[:, a_xy, :].dot(V)])).reshape(-1, 1)
+                                        self.mdp.gamma * self.mdp.transition_matrix[:, a_xy, :].dot(V)])).reshape(-1, 1)
             diff = np.amax(abs(Vp - V))
             V = Vp.copy()
 
@@ -198,7 +198,7 @@ class BaseMaxEntIRLAlgorithm(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             # sum-out (SA)S
             new_state_visitation = np.einsum('ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True) / self.mdp.env.horizon
+        return np.sum(np.sum(sa_visit_t, axis=2), axis=1, keepdims=True / self.mdp.env.horizon)
 
     def train(self, trajectories):
         raise NotImplementedError

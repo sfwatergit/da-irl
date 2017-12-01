@@ -1,6 +1,6 @@
 import os.path as osp
 
-from impl.config import ConfigManager
+from misc.config import ConfigManager
 
 TRUTHY = ["true", 1, "True", "TRUE", "t", "y", "yes"]
 

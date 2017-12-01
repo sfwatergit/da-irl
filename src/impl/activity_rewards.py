@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 from cytoolz import memoize
-
 from impl.activity_env import ActivityEnv
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
@@ -10,6 +9,7 @@ from util.tf_utils import fc_net
 
 
 class ActivityLinearRewardFunction(RewardFunction):
+
     """
     Computes the activity reward based on the state which is the current activity and time of day.
     Initialized with config-defined scoring parameters.
@@ -32,8 +32,6 @@ class ActivityLinearRewardFunction(RewardFunction):
 
         self.lr = opt_params['lr']
 
-        self.sess = tf.Session()
-
         self.name = nn_params['name']
         self.h_dim = nn_params['h_dim']
         self.reg_dim = nn_params['reg_dim']
@@ -43,7 +41,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.input_ph = tf.placeholder(tf.float32, shape=[None, self.input_size], name='dim_ss')
 
         with tf.variable_scope(self.name):
-            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim, out_act=tf.nn.elu, init=initial_theta)
+            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim, out_act=None, init=initial_theta)
         self.theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
 
         self.reward = reward

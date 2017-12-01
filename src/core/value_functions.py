@@ -1,7 +1,4 @@
-from models.model_base import Model
-
-
-class ValueFunction(Model):
+class ValueFunction(object):
     """
     State-value function
     """

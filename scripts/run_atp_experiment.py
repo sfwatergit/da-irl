@@ -1,24 +1,31 @@
+#!/usr/bin/penv python
+# coding=utf-8
+
+# py3 compat
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
+# std lib
 import argparse
 import ast
 import datetime
 import json
+import multiprocessing
 import os.path as osp
 import platform
 import uuid
+from itertools import izip
 
 import dateutil
-import joblib
 import matplotlib
 import numpy as np
-import tensorflow as tf
-from swlcommon import Persona, TraceLoader
 
-from algos.actor_mimic import ATPActorMimicIRL
 from impl.activity_config import ATPConfig
-from impl.expert_persona import ExpertPersonaAgent
+from impl.parallel.parallel_population import SubProcVecExpAgent
 from misc import logger
 from util.math_utils import create_dir_if_not_exists
-from util.misc_utils import get_expert_fnames
+from util.misc_utils import set_global_seeds, get_trace_fnames
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
@@ -28,16 +35,6 @@ else:
 import matplotlib.pyplot as plt
 
 plt.interactive(False)
-
-
-def tp():
-    uid_df = TraceLoader.load_traces_from_csv("../data/traces/traces_persona_0.csv")
-    p1 = Persona(traces=uid_df, build_profile=True,
-                 config_file='../data/misc/initial_profile_builder_config.json')
-    uid_df = TraceLoader.load_traces_from_csv("../data/traces/traces_persona_1.csv")
-    p2 = Persona(traces=uid_df, build_profile=True,
-                 config_file='../data/misc/initial_profile_builder_config.json')
-    return [p1, p2]
 
 
 def plot_reward(ys, log_dir='', title='', color='b', show=False):
@@ -53,36 +50,73 @@ def plot_reward(ys, log_dir='', title='', color='b', show=False):
 
 
 def run(config, log_dir):
-    experts = []
-    if config.resume_from is not None:
-        expert_file_data = get_expert_fnames(config.resume_from)
-        for filename in expert_file_data:
-            experts.append(joblib.load(filename))
-        expert_agent = ExpertPersonaAgent(config,
-                                          initial_theta=np.mean(np.array([experts[0]['theta'], experts[1]['theta']]),
-                                                                0))
-    else:
-        for idx, persona in enumerate(tp()):
-            expert_agent = ExpertPersonaAgent(config, persona)
+    # std lib
+    import logging
+
+    # third party
+    import gym
+    import tensorflow as tf
+
+    # swl
+    from swlcommon import Persona, TraceLoader
+
+    # da-irl
+    from algos.actor_mimic import ATPActorMimicIRL
+    from algos.maxent_irl import MaxEntIRL
+    from impl.activity_env import ActivityEnv
+    from impl.activity_mdp import ActivityMDP
+    from impl.activity_rewards import ActivityLinearRewardFunction
+    from impl.expert_persona import ExpertPersonaAgent
+
+    ncpu = multiprocessing.cpu_count()
+    if platform.system() == 'Darwin': ncpu //= 2
+    tf_config = tf.ConfigProto(allow_soft_placement=True, intra_op_parallelism_threads=ncpu,
+                               inter_op_parallelism_threads=ncpu)
+    tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
+    gym.logger.setLevel(logging.WARN)
+    activity_env = ActivityEnv(config)
+
+    trace_files = get_trace_fnames(config.traces_dir)
+
+    def make_expert(idx, trace_file):
+        def _thunk():
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
-            expert_agent.learn_reward()
-            expert_data = {'policy': expert_agent.policy, 'reward': expert_agent.reward.get_rewards(),
-                           'theta': expert_agent.reward.get_theta()}
-            experts.append(expert_data)
-            tf.reset_default_graph()
+            uid_df = TraceLoader.load_traces_from_csv(trace_file)
+            persona = Persona(traces=uid_df, build_profile=True,
+                              config_file=config.general_params.profile_builder_config_file_path)
+            mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env), 0.99, activity_env)
+            learning_algorithm = MaxEntIRL(mdp)
+            return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona)
 
-    model = ATPActorMimicIRL(expert_agent._learning_algorithm.mdp, experts)
+        return _thunk
+
+    expert_agent = SubProcVecExpAgent(
+        [make_expert(idx, trace_file) for idx, trace_file in enumerate(trace_files)])
+
+    expert_agent.learn_reward()
+
+    expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
+                   izip(expert_agent.get_policy(), expert_agent.get_rewards(), expert_agent.get_theta())]
+
+    init_theta = np.mean(np.array([expert_data[0]['theta'], expert_data[1]['theta']]), 0).reshape(-1, 1)
+    mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env, initial_theta=init_theta), 0.99, activity_env)
+
+    model = ATPActorMimicIRL(mdp, expert_data)
+
+    dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp))
+
     for i in range(30):
         model.train_amn()
-    model.train(expert_agent.trajectories)
-    plt.imshow(experts[0]['reward'], aspect='auto')
+    model.train(dummy_expert.trajectories)
+
+    plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')
     plt.clf()
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
 
-    theta = experts[1]['theta']
+    theta = expert_data[0]['theta'][0]
     home_feats = theta[4:96]
     work_feats = theta[98:192]
     other_feats = theta[193:-4]
@@ -96,6 +130,8 @@ def run(config, log_dir):
     plot_reward(other_feats, log_dir, 'other', 'r', show)
     plt.clf()
 
+    expert_agent.close()
+
 
 if __name__ == '__main__':
     now = datetime.datetime.now(dateutil.tz.tzlocal())
@@ -108,6 +144,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='Experiment configuration', type=str)
+    parser.add_argument('--traces_dir', help='Location of trace files', type=str)
     parser.add_argument(
         '--exp_name', type=str, default=default_exp_name, help='Name of the experiment.')
     parser.add_argument('--snapshot_mode', type=str, default='last',
@@ -128,7 +165,6 @@ if __name__ == '__main__':
                         help='Whether to only print the tabular log information (in a horizontal format)')
     parser.add_argument('--resume_from', type=str, default=None,
                         help='Name of the pickle file to resume experiment from.')
-
     parser.add_argument('--seed', type=int,
                         help='Random seed for numpy')
 
@@ -136,10 +172,14 @@ if __name__ == '__main__':
 
     with open(args.config) as fp:
         config = ATPConfig(data=json.load(fp), json_file=args.config)
+        # TODO: This is a hacky way to combine file-based and cli config params... fix this!
         config._to_dict().update(args.__dict__)
     if args.seed is not None:
-        pass
+        set_global_seeds(config.seed)
         # set_seed(args.seed)
+
+
+    config_file = "../data/misc/initial_profile_builder_config.json"
 
     default_log_dir = config.general_params.log_path
     exp_name = config.general_params.run_id + default_exp_name
@@ -160,5 +200,5 @@ if __name__ == '__main__':
 
     logger.set_snapshot_dir(log_dir)
     logger.set_log_tabular_only(config.log_tabular_only)
-
+    logger.dump_tabular(with_prefix=False)
     run(config, log_dir)

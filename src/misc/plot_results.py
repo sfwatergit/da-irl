@@ -1,7 +1,6 @@
 import matplotlib
 import pandas as pd
 import seaborn as sns
-import numpy as np
 
 matplotlib.use('macosx')
 import matplotlib.pyplot as plt

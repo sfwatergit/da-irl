@@ -17,7 +17,6 @@ import joblib
 import tensorflow as tf
 import numpy as np
 
-from misc.autoargs import get_all_parameters
 from misc.console import mkdir_p
 from misc.serializable import Serializable
 from misc.tabulate import tabulate
@@ -229,17 +228,7 @@ def save_itr_params(itr, params):
 def log_parameters(log_file, args):
     log_params = {}
     for param_name, param_value in args.__dict__.iteritems():
-        if any([param_name.startswith(x) for x in classes.keys()]):
-            continue
         log_params[param_name] = param_value
-    for name, cls in classes.iteritems():
-        if isinstance(cls, type):
-            params = get_all_parameters(cls, args)
-            params["_name"] = getattr(args, name)
-            log_params[name] = params
-        else:
-            log_params[name] = getattr(cls, "__kwargs", dict())
-            log_params[name]["_name"] = cls.__module__ + "." + cls.__class__.__name__
     mkdir_p(os.path.dirname(log_file))
     with open(log_file, "w") as f:
         json.dump(log_params, f, indent=2, sort_keys=True)

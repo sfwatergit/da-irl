@@ -2,18 +2,17 @@
 Modified from
 https://github.com/makokal/funzo/blob/master/funzo/models/mdp.py
 """
-# Py3 Compat:
+# py3 compat:
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
-# Default
-import inspect
+# std lib
 from abc import abstractmethod, abstractproperty, ABCMeta
 from collections import Hashable
 from functools import reduce
 
-# Third Party:
+# third party
 import numpy as np
 import six
 from cytoolz import memoize
@@ -78,7 +77,7 @@ class MDP(six.with_metaclass(ABCMeta)):
             for state in self._env.states.values():
                 for action in [self._env.actions[a] for a in self.actions(state)]:
                     Sp = self.T(state, action)
-                    for p,sp in Sp:
+                    for p, sp in Sp:
                         P[state.state_id, action.action_id, sp.state_id] = p
             self._P = P
         return self._P

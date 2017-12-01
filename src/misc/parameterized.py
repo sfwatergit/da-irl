@@ -1,9 +1,12 @@
+# py3 compat
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
+# vendor
 import tensorflow as tf
 
+# ours
 from misc.serializable import Serializable
 from util.tf_utils import unflatten_tensors, flatten_tensors
 

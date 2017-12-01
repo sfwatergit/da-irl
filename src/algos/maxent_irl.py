@@ -40,7 +40,6 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
         for epoch in range(epochs):
             iter_data = self.expert_demos
             iter_data_idxs = np.arange(0, len(iter_data))
-            np.random.shuffle(iter_data_idxs)
             n_iters = int(float(len(iter_data) / minibatch_size))
             for itr in range(n_iters):
                 logger.record_tabular("Iteration", epoch)
@@ -85,8 +84,8 @@ class MaxEntIRL(BaseMaxEntIRLAlgorithm):
                     logger.record_tabular('Time', time.time() - start_time)
                     logger.record_tabular('ItrTime', time.time() - iter_start_time)
                     params = self.get_epoch_snapshot(epoch)
-                    logger.save_itr_params(epoch, params)
                     logger.dump_tabular(with_prefix=False)
+                    logger.save_itr_params(epoch, params)
 
     def get_epoch_snapshot(self, epoch):
         return dict(epoch=epoch,
