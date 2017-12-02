@@ -176,17 +176,7 @@ class ActivityFeature(FeatureExtractor):
 #         else:
 #             return np.array([0])
 
-class EndDayAtHomeFeature(ActivityFeature):
-    def __init__(self, activity_params, **kwargs):
-        size = 1
-        ident = 'End day at home'
-        super(EndDayAtHomeFeature, self).__init__(ident, size, activity_params, **kwargs)
 
-    def __call__(self, state, action):
-        if state.state_id in self.env.terminals:
-            return np.array([1])
-        else:
-            return np.array([0])
 
 class EarlyArrivalFeature(ActivityFeature):
     def __init__(self, activity_params, **kwargs):

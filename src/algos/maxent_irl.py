@@ -94,13 +94,13 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         reward = self.reward.get_rewards()
 
-        Q = np.zeros([self.nS,self.nA], dtype=np.float32)
+        Q = np.zeros([self.nS, self.nA], dtype=np.float32)
         diff = float("inf")
 
         while diff > 1e-4:
             V = softmax(Q)
             Qp = reward + self.mdp.gamma * self.mdp.transition_matrix.dot(V)
-            diff = np.amax(abs(Q-Qp))
+            diff = np.amax(abs(Q - Qp))
             Q = Qp
 
         pi = self._compute_policy(Q).astype(np.float32)
@@ -132,6 +132,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         return np.sum(np.sum(sa_visit_t, axis=2), axis=1)
 
     def train(self, trajectories):
+
         self.expert_demos = trajectories
         self._max_path_length = sum(len(path) for path in self.expert_demos)
 
@@ -180,11 +181,9 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 # self.mdp.reward.update_reward()
                 logger.record_tabular("Time", time.time() - start_time)
                 logger.record_tabular("ItrTime", time.time() - iter_start_time)
-                params = self._get_itr_snapshot(itr)
                 logger.dump_tabular(with_prefix=False)
-                logger.save_itr_params(itr, params)
 
-    def _get_itr_snapshot(self, epoch):
+    def get_itr_snapshot(self, epoch):
         return dict(epoch=epoch,
                     policy=self.policy,
                     theta=self.reward.get_theta(),

@@ -1,23 +1,25 @@
+import os
+import platform
+
+import matplotlib
 import numpy as np
 import tensorflow as tf
 from cytoolz import memoize
-import platform
 
 from src.core.mdp import RewardFunction
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
-from src.util.math_utils import get_subclass_list, cartesian
+from src.util.math_utils import get_subclass_list, cartesian, create_dir_if_not_exists
 from src.util.tf_utils import fc_net
-import matplotlib
+
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
 else:
     matplotlib.rcParams['backend'] = 'TkAgg'
 
 import matplotlib.pyplot as plt
+
 plt.interactive(False)
-
-
 
 
 class ActivityRewardFunction(RewardFunction):
@@ -68,7 +70,7 @@ class ActivityRewardFunction(RewardFunction):
         self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
-        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
+        self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(zip(self.grad_theta, self.theta))
@@ -124,22 +126,24 @@ class ActivityRewardFunction(RewardFunction):
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self._env.nS, self._env.nA])
 
-    def plot_current_theta(self):
-        plot_theta(self.get_theta(), self._env.config.general_params.log_dir)
+    def plot_current_theta(self, ident):
+        image_path = os.path.join(self._env.config.general_params.log_dir, "expert_{}".format(ident))
+        create_dir_if_not_exists(image_path)
+        plot_theta(self.get_theta(), image_path, ident=ident)
 
 
-def plot_theta(theta, log_dir, show=False):
+def plot_theta(theta, image_path, show=False, ident=''):
     home_feats = theta[4:96]
     work_feats = theta[100:193]
     other_feats = theta[193:-4]
-    plot_reward(home_feats, log_dir, 'home', 'b', show)
+    plot_reward(home_feats, image_path, 'home', 'b', show, ident)
     plt.clf()
-    plot_reward(work_feats, log_dir, 'work', 'g', show)
+    plot_reward(work_feats, image_path, 'work', 'g', show, ident)
     plt.clf()
-    plot_reward(other_feats, log_dir, 'other', 'r', show)
+    plot_reward(other_feats, image_path, 'other', 'r', show, ident)
 
 
-def plot_reward(ys, log_dir='', title='', color='b', show=False):
+def plot_reward(ys, image_path='', title='', color='b', show=False, ident=''):
     xs = np.arange(0, len(ys)) * 15 / 60
     plt.plot(xs, ys, color)
     plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(title.capitalize()))
@@ -148,4 +152,4 @@ def plot_reward(ys, log_dir='', title='', color='b', show=False):
     if show:
         plt.show()
     else:
-        plt.savefig(log_dir + '/persona_0_activity_{}'.format(title))
+        plt.savefig(image_path + '/{}_activity_persona_{}'.format(title, ident))

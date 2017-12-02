@@ -77,7 +77,7 @@ def run(config, log_dir):
                               config_file=config.general_params.profile_builder_config_file_path)
             mdp = ActivityMDP(ActivityRewardFunction(activity_env), config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
-            return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona)
+            return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona, idx)
 
         return _thunk
 

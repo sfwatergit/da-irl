@@ -1,7 +1,4 @@
-from abc import ABCMeta
-
 import numpy as np
-import six
 from swlcommon import TraceLoader
 from swlcommon.personatrainer.persona import Persona
 from tqdm import tqdm
@@ -10,10 +7,11 @@ from src.algos.maxent_irl import MaxEntIRL
 from src.core.expert_agent import ExpertAgent
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
+from src.misc import logger
 
 
-class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
-    def __init__(self, config, env, learning_algorithm=None, persona=None):
+class ExpertPersonaAgent(ExpertAgent):
+    def __init__(self, config, env, learning_algorithm=None, persona=None, pid=None):
         # type: (ATPConfig, ActivityEnv, MaxEntIRL, Persona) -> ExpertPersonaAgent
         super(ExpertPersonaAgent, self).__init__(config, env, learning_algorithm)
 
@@ -24,7 +22,13 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
         else:
             self.persona = persona
 
-        self._identifier = self.persona.id
+        if pid is None:
+            self._identifier = self.persona.id
+        else:
+            self._identifier = pid
+        prefix = "pid: %s | " % self._identifier
+        logger.push_prefix(prefix)
+        logger.push_tabular_prefix(prefix)
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
@@ -32,6 +36,10 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
             self._filter_trajectories_not_starting_and_ending_at_home(self.persona.get_activity_blanket_as_array()),
             dtype='S16')
         self._trajectories = None
+
+    @property
+    def identifier(self):
+        return self._identifier
 
     @property
     def home_site(self):

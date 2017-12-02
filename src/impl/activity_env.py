@@ -174,10 +174,10 @@ class ActivityEnv(gym.Env):
         for t in range(self.horizon):
             for s, el in enumerate(self.activity_types + self.travel_modes):
                 edge = (el, t)
-                if t < self.horizon - 1:  # if it's not the last period, we can still make decisions
+                if t < self.horizon - 2:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
-                    available_actions = self.get_legal_actions_for_state(el)
+                    available_actions = [self.get_home_action_id()]
                     term = True
                 for a in available_actions:
                     ns_el = self.actions[a].succ_ix
