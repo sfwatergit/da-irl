@@ -20,19 +20,19 @@ class ActivityEnv(gym.Env):
     def __init__(self, config, *args, **kwargs):
         super(ActivityEnv, self).__init__()
 
-        self._config = config
-        self.irl_params = self._config.irl_params
-        self.segment_mins = self._config.profile_params.segment_minutes
+        self.config = config
+        self.irl_params = self.config.irl_params
+        self.segment_mins = self.config.profile_params.segment_minutes
         self._horizon = int(self.irl_params.horizon / self.segment_mins)
-        self.home_activity = self._config.home_activity
-        self.work_activity = self._config.work_activity
-        self.shopping_activity = self._config.shopping_activity
-        self.other_activity = self._config.other_activity
+        self.home_activity = self.config.home_activity
+        self.work_activity = self.config.work_activity
+        self.shopping_activity = self.config.shopping_activity
+        self.other_activity = self.config.other_activity
         self.home_start_state = None
         self.home_goal_state = None
 
-        self.activity_types = self._config.activity_params.keys()
-        self.travel_modes = self._config.travel_params.keys()
+        self.activity_types = self.config.activity_params.keys()
+        self.travel_modes = self.config.travel_params.keys()
         self.nA = len(self.activity_types + self.travel_modes)
         self._action_rev_map = None
         self.actions = self._build_actions()
@@ -174,10 +174,10 @@ class ActivityEnv(gym.Env):
         for t in range(self.horizon):
             for s, el in enumerate(self.activity_types + self.travel_modes):
                 edge = (el, t)
-                if t < self.horizon - 2:  # if it's not the last period, we can still make decisions
+                if t < self.horizon - 1:  # if it's not the last period, we can still make decisions
                     available_actions = self.get_legal_actions_for_state(el)
                 else:
-                    available_actions = [self.get_home_action_id()]
+                    available_actions = self.get_legal_actions_for_state(el)
                     term = True
                 for a in available_actions:
                     ns_el = self.actions[a].succ_ix

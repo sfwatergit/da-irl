@@ -6,7 +6,7 @@ matplotlib.use('macosx')
 import matplotlib.pyplot as plt
 
 plt.interactive(False)
-import json
+impor tjson
 import os
 
 """

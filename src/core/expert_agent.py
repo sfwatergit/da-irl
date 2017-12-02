@@ -29,9 +29,7 @@ class ExpertAgent(object):
         raise NotImplementedError('Must implement trajectories method')
 
     def learn_reward(self):
-        self._learning_algorithm.train(self.trajectories,
-                                       self._config.irl_params.num_iters,
-                                       len(self.trajectories))
+        self._learning_algorithm.train(self.trajectories)
 
     @property
     def reward_function(self):

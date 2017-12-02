@@ -37,16 +37,7 @@ import matplotlib.pyplot as plt
 plt.interactive(False)
 
 
-def plot_reward(ys, log_dir='', title='', color='b', show=False):
-    xs = np.arange(0, len(ys)) * 15 / 60
-    plt.plot(xs, ys, color)
-    plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(title.capitalize()))
-    plt.xlabel('time (hr)')
-    plt.ylabel('marginal utility (utils/hr)')
-    if show:
-        plt.show()
-    else:
-        plt.savefig(log_dir + '/persona_0_activity_{}'.format(title))
+
 
 
 def run(config, log_dir):
@@ -61,11 +52,10 @@ def run(config, log_dir):
     from swlcommon import Persona, TraceLoader
 
     # da-irl
-    from src.algos.actor_mimic import ATPActorMimicIRL
     from src.algos.maxent_irl import MaxEntIRL
     from src.impl.activity_env import ActivityEnv
     from src.impl.activity_mdp import ActivityMDP
-    from src.impl.activity_rewards import ActivityLinearRewardFunction
+    from src.impl.activity_rewards import ActivityRewardFunction
     from src.impl.expert_persona import ExpertPersonaAgent
 
     ncpu = multiprocessing.cpu_count()
@@ -85,7 +75,7 @@ def run(config, log_dir):
             uid_df = TraceLoader.load_traces_from_csv(trace_file)
             persona = Persona(traces=uid_df, build_profile=True,
                               config_file=config.general_params.profile_builder_config_file_path)
-            mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env), 0.99, activity_env)
+            mdp = ActivityMDP(ActivityRewardFunction(activity_env), config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
             return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona)
 
@@ -111,25 +101,12 @@ def run(config, log_dir):
     #     model.train_amn()
     # model.train(dummy_expert.trajectories)
 
+
     plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')
     plt.clf()
     logger.remove_tabular_output(tabular_log_file)
     logger.remove_text_output(text_log_file)
-
-    theta = init_theta
-    home_feats = theta[4:96]
-    work_feats = theta[98:192]
-    other_feats = theta[193:-4]
-
-    show = False
-
-    plot_reward(home_feats, log_dir, 'home', 'b', show)
-    plt.clf()
-    plot_reward(work_feats, log_dir, 'work', 'g', show)
-    plt.clf()
-    plot_reward(other_feats, log_dir, 'other', 'r', show)
-    plt.clf()
 
     expert_agent.close()
 
@@ -172,7 +149,7 @@ if __name__ == '__main__':
     args, unparsed = parser.parse_known_args()
 
     root_dir = osp.dirname(osp.abspath(__file__))
-    config_file = osp.join(root_dir,args.config)
+    config_file = osp.join(root_dir, args.config)
     with open(config_file) as fp:
         config = ATPConfig(data=json.load(fp), json_file=args.config)
         # TODO: This is a hacky way to combine file-based and cli config params... fix this!
@@ -181,11 +158,11 @@ if __name__ == '__main__':
         set_global_seeds(config.seed)
         # set_seed(args.seed)
 
-
     default_log_dir = config.general_params.log_path
     exp_name = config.general_params.run_id + default_exp_name
 
     log_dir = osp.join(default_log_dir, exp_name)
+    config.general_params._to_dict().update({'log_dir':log_dir})
 
     tabular_log_file = osp.join(log_dir, config.tabular_log_file)
     text_log_file = osp.join(log_dir, config.text_log_file)

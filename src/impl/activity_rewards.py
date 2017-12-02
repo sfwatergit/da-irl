@@ -1,28 +1,40 @@
 import numpy as np
 import tensorflow as tf
 from cytoolz import memoize
-from src.impl.activity_env import ActivityEnv
+import platform
+
 from src.core.mdp import RewardFunction
+from src.impl.activity_env import ActivityEnv
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
 from src.util.math_utils import get_subclass_list, cartesian
 from src.util.tf_utils import fc_net
+import matplotlib
+if platform.system() == 'Darwin':
+    matplotlib.rcParams['backend'] = 'agg'
+else:
+    matplotlib.rcParams['backend'] = 'TkAgg'
+
+import matplotlib.pyplot as plt
+plt.interactive(False)
 
 
-class ActivityLinearRewardFunction(RewardFunction):
 
+
+class ActivityRewardFunction(RewardFunction):
     """
     Computes the activity reward based on the state which is the current activity and time of day.
     Initialized with config-defined scoring parameters.
     """
 
-    def __init__(self, env, opt_params=None, nn_params=None, rmax=1.0, initial_theta=None):
+    def __init__(self, env, opt_params=None, nn_params=None, rmax=1.0,
+                 initial_theta=None):
         # type: (ActivityEnv) -> None
-        params = env._config
+        params = env.config
         self.activity_features = self.make_activity_features(env, params)
         self.trip_features = self.make_trip_features(env, params)
         self._make_indices(params)
-        super(ActivityLinearRewardFunction, self).__init__(self.activity_features + self.trip_features, env, rmax,
-                                                           initial_weights=initial_theta)
+        super(ActivityRewardFunction, self).__init__(self.activity_features + self.trip_features, env, rmax,
+                                                     initial_weights=initial_theta)
 
         if nn_params is None:
             nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
@@ -53,7 +65,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
         self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
 
-        self.grad_theta = tf.gradients(self.reward, self.theta, - self.grad_r)
+        self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
         # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
@@ -90,10 +102,7 @@ class ActivityLinearRewardFunction(RewardFunction):
         phi = np.zeros((self._dim_ss, 1), float)
         state = self._env.states[s]
         feature_ixs = range(self._dim_ss)
-        if s in self._env.terminals or a == -1:
-            return phi
-        else:
-            action = self._env.actions[a]
+        action = self._env.actions[a]
         for ix in feature_ixs:
             phi[ix] = self.features[ix](state, action)
         return phi
@@ -114,3 +123,29 @@ class ActivityLinearRewardFunction(RewardFunction):
         feed_dict = {self.input_ph: self.feature_matrix.reshape([-1, self.dim_ss])}
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self._env.nS, self._env.nA])
+
+    def plot_current_theta(self):
+        plot_theta(self.get_theta(), self._env.config.general_params.log_dir)
+
+
+def plot_theta(theta, log_dir, show=False):
+    home_feats = theta[4:96]
+    work_feats = theta[100:193]
+    other_feats = theta[193:-4]
+    plot_reward(home_feats, log_dir, 'home', 'b', show)
+    plt.clf()
+    plot_reward(work_feats, log_dir, 'work', 'g', show)
+    plt.clf()
+    plot_reward(other_feats, log_dir, 'other', 'r', show)
+
+
+def plot_reward(ys, log_dir='', title='', color='b', show=False):
+    xs = np.arange(0, len(ys)) * 15 / 60
+    plt.plot(xs, ys, color)
+    plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(title.capitalize()))
+    plt.xlabel('time (hr)')
+    plt.ylabel('marginal utility (utils/hr)')
+    if show:
+        plt.show()
+    else:
+        plt.savefig(log_dir + '/persona_0_activity_{}'.format(title))

@@ -1,5 +1,3 @@
-import os.path as osp
-
 from src.misc.config import ConfigManager
 
 TRUTHY = ["true", 1, "True", "TRUE", "t", "y", "yes"]
@@ -9,9 +7,10 @@ class IRLConfig(ConfigManager):
     def __init__(self, data, json_file=None):
         super(IRLConfig, self).__init__()
         self.num_iters = data.pop('num_iters', 10)
-        self.energy_level_bins = data.pop('energy_level_bins', 3)
         self.traces_file_path = data.pop('traces_file_path', None)
         self.horizon = data.pop('horizon', 1440)
+        self.gamma = data.pop('gamma', 0.999)
+        self.avi_tol = data.pop('avi_tol', 1e-4)
 
 
 class ProfileBuilderConfig(ConfigManager):
@@ -42,12 +41,6 @@ class ATPConfig(ConfigManager):
         self.profile_params = ProfileBuilderConfig(data=None,
                                                    json_file=self.general_params.profile_builder_config_file_path)
 
-        self.activity_params = {
-            'performing': data.pop('performing', 6.0),
-            'waiting': data.pop('waiting', 0.0),
-            'lateArrival': data.pop('lateArrival', -18.0),
-            'earlyDeparture': data.pop('earlyDeparture', 0.0)}
-
         activity_params = data.pop('activityParams')
 
         self.activity_params = {}
@@ -68,9 +61,6 @@ class ATPConfig(ConfigManager):
         self.shopping_activity = self.find_activity_type_name('shopping')
         self.other_activity = self.find_activity_type_name('other')
 
-        self.travel_params = {
-            'utilityOfLineSwitch': data.pop('utilityOfLineSwitch', -3.0),
-            'waitingPt': data.pop('waitingPt', -3.0)}
         mode_params = data.pop('modeParams')
         self.travel_params = {}
         for mode in mode_params.keys():

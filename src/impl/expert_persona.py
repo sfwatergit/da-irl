@@ -28,9 +28,10 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
-        self._profile = np.array(self.persona.get_activity_blanket_as_array(),dtype='S16')
+        self._profile = np.array(
+            self._filter_trajectories_not_starting_and_ending_at_home(self.persona.get_activity_blanket_as_array()),
+            dtype='S16')
         self._trajectories = None
-
 
     @property
     def home_site(self):
@@ -50,6 +51,13 @@ class ExpertPersonaAgent(six.with_metaclass(ABCMeta, ExpertAgent)):
             t2p = self._profile_to_trajectories
             self._trajectories = t2p(self._profile)
         return self._trajectories
+
+    def _filter_trajectories_not_starting_and_ending_at_home(self, trajectories):
+        res = []
+        for trajectory in trajectories:
+            if (trajectory[0] == self.home_site.type.symbol) and (trajectory[-1] == self.home_site.type.symbol):
+                res.append(trajectory)
+        return res
 
     def _profile_to_trajectories(self, trajectory_matrix):
         trajectories = []

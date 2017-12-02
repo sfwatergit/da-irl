@@ -1,1 +1,1 @@
-from irl_algorithm import *
+from maxent_irl import *

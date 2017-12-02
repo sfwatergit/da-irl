@@ -8,20 +8,11 @@
   },
   "irlParams": {
     "traces_file_path": "data/traces/traces_persona_1.csv",
-    "num_iters": 200,
-    "horizon": 1440
+    "num_iters": 300,
+    "horizon": 1440,
+    "gamma": 0.99,
+    "avi_tol": 1e-4
   },
-  "filterParams": {
-    "kind": "dur",
-    "qt": 0.9
-  },
-  "earlyDeparture": -0.0,
-  "lateArrival": -18.0,
-  "marginalUtilityOfMoney": 1.0,
-  "performing": 6.0,
-  "utilityOfLineSwitch": -1.0,
-  "waiting": -0.0,
-  "waitingPt": -3.0,
   "activityParams": {
     "H": {
       "closingTime": "undefined",

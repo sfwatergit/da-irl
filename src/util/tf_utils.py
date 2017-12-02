@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def fc(x, n_output, scope="fc", activation_fn=None, initializer=None, regularizer=None):
+def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
     """fully connected layer with relu activation wrapper
     Args
       x:          2d tensor [batch, n_input]

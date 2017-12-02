@@ -216,18 +216,12 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
                 actions = state.available_actions
                 s = state.state_id
                 for a in actions:
-                    if s in self._env.terminals:
-                        self._feature_matrix[s, a] = np.zeros([self._dim_ss])
-                    else:
-                        self._feature_matrix[s, a] = self.phi(s, a).T
+                    self._feature_matrix[s, a] = self.phi(s, a).T
         return self._feature_matrix
 
     def phi(self, s, a):
         state = self._env.states[s]
-        if s in self._env.terminals or a == -1:
-            return np.zeros(self._dim_ss)
-        else:
-            action = self._env.actions[a]
+        action = self._env.actions[a]
         return np.concatenate([feature(state, action) for feature in self._features])
 
 

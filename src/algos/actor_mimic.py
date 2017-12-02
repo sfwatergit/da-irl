@@ -76,7 +76,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
             self.use_amn_policy = False
             mu_exp = np.sum(mu, 1)
         else:
-            mu_exp = super(MaxEntIRL, self).state_action_visitation_frequency()
+            mu_exp = self.state_action_visitation_frequency()
         return mu_exp
 
     def legal_actions(self, obs):
