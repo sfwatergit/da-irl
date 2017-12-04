@@ -2,9 +2,8 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
-import multiprocessing
-
 import gym
+import multiprocessing
 import networkx as nx
 import numpy as np
 from gym.spaces import MultiDiscrete
@@ -12,8 +11,6 @@ from gym.spaces.discrete import Discrete
 
 from src.impl.activity_mdp import ActivityState, ATPAction, TravelState
 from src.util.math_utils import to_onehot
-
-num_cores = multiprocessing.cpu_count()
 
 
 class ActivityEnv(gym.Env):
@@ -38,13 +35,13 @@ class ActivityEnv(gym.Env):
         self.actions = self._build_actions()
         self.__actions_space = Discrete(self.nA)
 
-        self.nS = int(self.nA * self.horizon)
         self.states = {}
+        self.terminals = []
+        self._g = self.build_state_graph()
+        self.nS = len(self.states)
 
         self.__observation_space = MultiDiscrete([[0, self.nA], [0, self.nS]])
-        self.terminals = []
 
-        self._g = self.build_state_graph()
         self._transition_matrix = None
         self._reward_function = None
 
@@ -166,44 +163,8 @@ class ActivityEnv(gym.Env):
 
         # tmat = data.tmat  # SxT matrix
 
-        g = nx.DiGraph()
-        state_ix = 0
+        g = self.gen_states()
 
-        # Add unique states
-        term = False
-        for t in range(self.horizon):
-            for s, el in enumerate(self.activity_types + self.travel_modes):
-                edge = (el, t)
-                if t < self.horizon - 2:  # if it's not the last period, we can still make decisions
-                    available_actions = self.get_legal_actions_for_state(el)
-                else:
-                    available_actions = [self.get_home_action_id()]
-                    term = True
-                for a in available_actions:
-                    ns_el = self.actions[a].succ_ix
-                    g.add_edge(edge, (ns_el, t + 1), attr_dict={'ix': a})
-                if el in self.activity_types:
-                    el_type = ActivityState(state_ix, el, t, self.segment_mins, edge)
-                    if t == 0 and el == self.home_activity:
-                        self.home_start_state = el_type
-                elif el in self.travel_modes:
-                    el_type = TravelState(state_ix, el, t, self.segment_mins, edge)
-                else:
-                    raise ValueError("%s not Found!" % el)
-                if term:
-                    el_type = ActivityState(state_ix, self.home_activity, t, self.segment_mins, edge)
-                    self.terminals.append(state_ix)
-                    self.home_goal_state = el_type
-                    g.add_edge(edge, (self.home_activity, t + 1), attr_dict={'ix': available_actions[0]})
-                el_type.available_actions.extend(available_actions)
-                g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
-                self.states[state_ix] = el_type
-                state_ix += 1
-
-        edge = (self.home_goal_state, self.horizon)
-        el_type = ActivityState(state_ix, self.home_activity, t, self.segment_mins, edge)
-        el_type.available_actions.extend(available_actions)
-        g.add_node(edge, attr_dict={'ix': state_ix, 'pos': edge, 'state': el_type})
         return g
 
     def get_home_action_id(self):
@@ -211,3 +172,42 @@ class ActivityEnv(gym.Env):
         for id, act in self.actions.items():
             if self.home_activity == act.succ_ix:
                 return id
+
+    def gen_states(self):
+        g = nx.DiGraph()
+        self.home_goal_state = ActivityState(0, self.home_activity, self.horizon - 1, self.segment_mins,
+                                             (self.home_activity, self.horizon - 1))
+        self.states[0] = self.home_goal_state
+        g.add_node((self.home_activity, self.horizon - 1),
+                   attr_dict={'ix': 0, 'pos': (self.home_activity, self.horizon - 1), 'state': self.home_goal_state})
+        self.terminals.append(0)
+        state_idx = 1
+        for time in reversed(range(1, self.horizon - 1)):
+            for s, label in enumerate(self.activity_types + self.travel_modes):
+                S = ActivityState if label in self.activity_types else TravelState
+                state = S(state_idx, label, time, self.segment_mins, (label, time))
+                self.states[state_idx] = state
+                g.add_node((label, time), attr_dict={'ix': state_idx, 'pos': (label, time), 'state': state})
+                state_idx += 1
+        self.home_start_state = ActivityState(state_idx, self.home_activity, 0, self.segment_mins,
+                                              (self.home_activity, 0))
+        self.states[state_idx] = self.home_start_state
+        g.add_node((self.home_activity, 0),
+                   attr_dict={'ix': state_idx, 'pos': (self.home_activity, 0), 'state': self.home_start_state})
+        return self.gen_actions(g)
+
+    def gen_actions(self, g):
+        for state in self.states.values():
+            if state == self.home_goal_state:
+                action_labels = [dict((action.succ_ix, a) for a, action in self.actions.items())[self.home_activity]]
+            else:
+                action_labels = self.get_legal_actions_for_state(state.state_label)
+            if len(action_labels) > 0:
+                for a in action_labels:
+                    ns_el = self.actions[a].succ_ix
+                    if state == self.home_goal_state:
+                        g.add_edge(state.edge, (ns_el, state.time_index))
+                    else:
+                        g.add_edge(state.edge, (ns_el, state.time_index + 1))
+                state.available_actions.extend(action_labels)
+        return g

@@ -3,11 +3,11 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
-import time
 from abc import ABCMeta
 
 import numpy as np
 import six
+import time
 
 from src.algos.base import IRLAlgorithm
 from src.misc import logger
@@ -28,7 +28,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
            Twenty-Second Conference on Artificial Intelligence (AAAI), 1433–1438.
        """
 
-    def __init__(self, mdp, avi_tol=1e-4, verbose=False):
+    def __init__(self, mdp, avi_tol=1e-4, verbose=False, policy=None):
         """
 
         Args:
@@ -41,7 +41,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         self.nA = len(self.mdp.A)
 
         self.expert_demos = None
-        self._policy = None
+        self._policy = policy
         self._reward = self.mdp.reward_function
         self._dim_ss = mdp.reward_function.dim_ss
         self._total_num_paths = None
@@ -109,7 +109,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
     def state_visitation_frequency(self):
         """
-        Given the policy estimated at this iteration, computes the frequency with which a state is visited.
+        Given the policy estimated at this iteration, computes the frequency with which a state and action are visited.
 
         Args:
             pi (np.ndarray): S x A policy
@@ -123,16 +123,17 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         sa_visit_t = np.zeros(
             (self.mdp.transition_matrix.shape[0], self.mdp.transition_matrix.shape[1], self.mdp.env.horizon))
 
-        for i in range(int(self.mdp.env.horizon)):
+        for i in range(self.mdp.env.horizon):
             sa_visit = state_visitation * self.policy
             sa_visit_t[:, :, i] = sa_visit  # (discount**i) * sa_visit
             # sum-out (SA)S
             new_state_visitation = np.einsum(u'ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum(np.sum(sa_visit_t, axis=2), axis=1)
+        return np.sum(sa_visit_t, axis=2) / self.mdp.env.horizon
 
-    def train(self, trajectories):
-
+    def train(self, trajectories, num_iters=None, skip_policy=1):
+        if num_iters is None:
+            num_iters=self.mdp.env.config.irl_params.num_iters
         self.expert_demos = trajectories
         self._max_path_length = sum(len(path) for path in self.expert_demos)
 
@@ -140,7 +141,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         mu_D = self.get_empirical_savf()
 
         start_time = time.time()
-        for itr in range(self.mdp.env.config.irl_params.num_iters):
+        for itr in range(num_iters):
             logger.log("Starting iteration {}".format(itr))
             logger.record_tabular("Iteration", itr)
             with logger.prefix("itr #%d " % itr):
@@ -148,14 +149,17 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 # Compute the policy using approximate (softmax) value iteration
                 polopt_start_time = time.time()
                 logger.log("Computing policy...")
-                self._policy = self.approximate_value_iteration()
+                if skip_policy > 0:
+                    skip_policy -= 1
+                else:
+                    self._policy = self.approximate_value_iteration()
                 logger.log("Computed policy in {:,.2f} seconds".format(time.time() - polopt_start_time))
 
                 # Compute the state visitation occupancy counts
                 svf_start_time = time.time()
                 logger.log("Computing state-action visitation frequency (savf)...")
-                mu_exp = self.state_visitation_frequency()
-                savf = self._compute_savf_from_svf(mu_exp)
+                savf = self.state_visitation_frequency()
+
                 logger.log("Computed savf in {:,.2f} seconds".format(time.time() - svf_start_time))
 
                 grad_r = mu_D - savf
@@ -213,25 +217,6 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         start_states = np.array([state[0] for state in path_states])
         start_state_count = np.bincount(start_states.astype(int), minlength=self.nS)
         return start_state_count.astype(float) / len(start_states)
-
-    def _compute_savf_from_svf(self, mu_exp):
-        """
-        Compute estimated state-action visitation frequency from state visitation frequency
-
-        Args:
-            mu_exp (np.ndarray): normalized estimated expert state visitation counts
-            pi (np.ndarray): expert policy
-
-        Returns:
-            np.ndarray: estimated state-action visitation frequency
-
-        """
-        D_sa = np.zeros((self.nS, self.nA), dtype=np.float32)
-        for s in self.mdp.S:
-            actions = self.mdp.env.states[s].available_actions
-            for a in actions:
-                D_sa[s, a] = self.policy[s, a] * mu_exp[s]
-        return D_sa
 
     def _log_likelihood(self):
         """

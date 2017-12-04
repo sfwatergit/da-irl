@@ -41,7 +41,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
     def train_amn(self):
         #  for each available action from the state
         for expert in self.experts:
-            pi_e = expert['policy'][0]
+            pi_e = expert['policy']
             # obs, acts, rews = self.sample_amn_policy(2)
             # obs = obs.reshape(-1, self.nS)
             obs = np.array([self.env.state_to_obs(self.env.states[s]) for s in
@@ -54,6 +54,12 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
                 self.lr: 0.01
             })
             print(loss)
+
+    @property
+    def policy(self):
+        if self._policy is None:
+            self._policy = np.array([self.evaluate_amn_policy([self.env.state_to_obs(s)]) for s in np.arange(self.nS)])
+        return self._policy
 
     def state_action_visitation_frequency(self):
         if self.use_amn_policy:

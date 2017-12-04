@@ -8,7 +8,6 @@ from __future__ import (
 )
 
 # Default
-import inspect
 from abc import abstractmethod, abstractproperty, ABCMeta
 from collections import Hashable
 from functools import reduce
@@ -78,7 +77,7 @@ class MDP(six.with_metaclass(ABCMeta)):
             for state in self._env.states.values():
                 for action in [self._env.actions[a] for a in self.actions(state)]:
                     Sp = self.T(state, action)
-                    for p,sp in Sp:
+                    for p, sp in Sp:
                         P[state.state_id, action.action_id, sp.state_id] = p
             self._P = P
         return self._P

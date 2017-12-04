@@ -136,7 +136,7 @@ class TMDP(MDP):
         i = 0
         diff = float("inf")
 
-        while diff>threshold:
+        while diff > threshold:
             V_prev = np.copy(V)
 
             for s_idx, state_x in enumerate(self.S):
@@ -144,8 +144,8 @@ class TMDP(MDP):
                     continue
                 actions = state_x.actions()
                 for a in actions:
-                    Q[s_idx,a] = sum([o[0] * (r[s_idx][o[1].state_id] + V_prev[o[1].state_id])
-                                         for o in actions[a].outcomes])
+                    Q[s_idx, a] = sum([o[0] * (r[s_idx][o[1].state_id] + V_prev[o[1].state_id])
+                                       for o in actions[a].outcomes])
                 V = softmax(Q, temperature)
             diff = np.amax(np.abs(V_prev - V))
 
@@ -343,7 +343,7 @@ if __name__ == '__main__':
                action_types)
     initialize_test_mdp(mdp)
     reward = init_test_rewards(mdp.S)
-    p,Q,V = mdp.approximate_value_iteration(reward)
+    p, Q, V = mdp.approximate_value_iteration(reward)
     plt.plot(range(len(V)), V)
     plt.show()
     print(p.sum(1))

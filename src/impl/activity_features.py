@@ -92,8 +92,6 @@ class ActivityFeature(FeatureExtractor):
     Specialized `FeatureExtractor` for resolving features of `Activity` `TourElement`s.
     """
 
-
-
     def __init__(self, ident, size, activity_params, **kwargs):
         super(ActivityFeature, self).__init__(ident, size, **kwargs)
         self.params = activity_params
@@ -177,6 +175,18 @@ class ActivityFeature(FeatureExtractor):
 #             return np.array([0])
 
 
+class EndDayAtHomeFeature(ActivityFeature):
+    def __init__(self, activity_params, **kwargs):
+        size = 1
+        ident = 'End day at home'
+        super(EndDayAtHomeFeature, self).__init__(ident, size, activity_params, **kwargs)
+
+    def __call__(self, state, action):
+        if state.state_id in self.env.terminals:
+            return np.array([1])
+        else:
+            return np.array([0])
+
 
 class EarlyArrivalFeature(ActivityFeature):
     def __init__(self, activity_params, **kwargs):
@@ -188,7 +198,7 @@ class EarlyArrivalFeature(ActivityFeature):
         # type: (ActivityState, ATPAction) -> ndarray
         arrival_time, departure_time = state.time_index * state.segment_minutes, (
             state.time_index + 1) * state.segment_minutes
-        next_state = self.T(state, action)[0]
+        next_state = self.T(state, action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -213,7 +223,7 @@ class LateArrivalFeature(ActivityFeature):
         super(LateArrivalFeature, self).__init__(ident, size, activity_params, **kwargs)
 
     def __call__(self, state, action):
-        next_state = self.T(state, action)
+        next_state = self.T(state, action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):

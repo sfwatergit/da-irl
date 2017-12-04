@@ -8,9 +8,9 @@
   },
   "irlParams": {
     "traces_file_path": "data/traces/traces_persona_1.csv",
-    "num_iters": 200,
+    "num_iters": 20,
     "horizon": 1440,
-    "gamma": 0.99,
+    "gamma": 0.97,
     "avi_tol": 1e-4
   },
   "activityParams": {

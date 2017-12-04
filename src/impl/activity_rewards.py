@@ -54,8 +54,9 @@ class ActivityRewardFunction(RewardFunction):
 
         self.input_ph = tf.placeholder(tf.float32, shape=[None, self.input_size], name='dim_ss')
 
-        with tf.variable_scope(self.name):
-            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim, out_act=None, init=initial_theta)
+        with tf.variable_scope(self.name) as va:
+            reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim, out_act=None,
+                            init=initial_theta, name=self.name)
         self.theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
 
         self.reward = reward
@@ -70,7 +71,7 @@ class ActivityRewardFunction(RewardFunction):
         self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
 
         self.grad_theta = [tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in range(len(self.grad_l2))]
-        self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
+        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(zip(self.grad_theta, self.theta))
@@ -141,6 +142,7 @@ def plot_theta(theta, image_path, show=False, ident=''):
     plot_reward(work_feats, image_path, 'work', 'g', show, ident)
     plt.clf()
     plot_reward(other_feats, image_path, 'other', 'r', show, ident)
+    plt.clf()
 
 
 def plot_reward(ys, image_path='', title='', color='b', show=False, ident=''):

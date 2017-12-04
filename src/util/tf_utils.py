@@ -29,13 +29,13 @@ def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
 
 
 def fc_net(X, n_layers=2, dim_out=1, dim_hidden=32, act=tf.nn.elu,
-           init=None, out_act=None):
+           init=None, out_act=None, name=''):
     out = X
     if n_layers > 1:
         for i in range(n_layers):
-            out = fc(out, dim_hidden, scope='fc%d' % i, activation_fn=act,
+            out = fc(out, dim_hidden, scope='fc%d_%s'.format(name) % i, activation_fn=act,
                      initializer=init)
-    out = fc(out, dim_out, scope='fc%s' % 'out', activation_fn=out_act,
+    out = fc(out, dim_out, scope='fc%s_%s' % ('out',name), activation_fn=out_act,
              initializer=init)
     return out
 

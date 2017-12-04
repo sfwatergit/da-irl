@@ -56,8 +56,7 @@ class ExpertPersonaAgent(ExpertAgent):
     @property
     def trajectories(self):
         if self._trajectories is None:
-            t2p = self._profile_to_trajectories
-            self._trajectories = t2p(self._profile)
+            self._trajectories = self._profile_to_trajectories(self._profile)
         return self._trajectories
 
     def _filter_trajectories_not_starting_and_ending_at_home(self, trajectories):
