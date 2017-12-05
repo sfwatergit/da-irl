@@ -103,7 +103,7 @@ class ExperimentDatabase(object):
             if os.path.isdir(f):
                 try:
                     progress = self._read_data(osp.join(f, "progress.csv"))
-                    params = self._read_params(osp.join(f, "params.json"))
+                    params = self._read_params(osp.join(f, "../params.json"))
                     params["exp_name"] = osp.basename(f)
                     if os.path.isfile(osp.join(f, "params.pkl")):
                         pkl_data = joblib.load(osp.join(f, "params.pkl"))

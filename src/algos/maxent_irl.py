@@ -142,7 +142,6 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         start_time = time.time()
         for itr in range(num_iters):
-            logger.log("Starting iteration {}".format(itr))
             logger.record_tabular("Iteration", itr)
             with logger.prefix("itr #%d " % itr):
                 iter_start_time = time.time()

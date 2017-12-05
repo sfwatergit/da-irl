@@ -1,6 +1,5 @@
 #!/usr/bin/penv python
 # coding=utf-8
-
 # py3 compat
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
@@ -8,14 +7,9 @@ from __future__ import (
 
 import sys
 
-import joblib
-import matplotlib
-from swlcommon import TraceLoader, Persona
-
 sys.path.append('../../da-irl')
 sys.path.append('../../da-irl/src')
 sys.path.append('../../common')
-
 # std lib
 import argparse
 import ast
@@ -24,12 +18,18 @@ import json
 import multiprocessing
 import os.path as osp
 import platform
-import uuid
 from itertools import izip
+import logging
 
-import dateutil
+# third party
+import gym
+import tensorflow as tf
 import numpy as np
 import pandas as pd
+import joblib
+import matplotlib
+
+from swlcommon import TraceLoader, Persona
 
 from src.algos.actor_mimic import ATPActorMimicIRL
 from src.impl.activity_config import ATPConfig
@@ -37,15 +37,17 @@ from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
 from src.util.math_utils import create_dir_if_not_exists
 from src.util.misc_utils import set_global_seeds, get_expert_fnames
+from src.algos.maxent_irl import MaxEntIRL
+from src.impl.activity_env import ActivityEnv
+from src.impl.activity_mdp import ActivityMDP
+from src.impl.activity_rewards import ActivityRewardFunction
+from src.impl.expert_persona import ExpertPersonaAgent
+import dateutil
 
 if platform.system() == 'Darwin':
-    matplotlib.rcParams['backend'] = 'agg'
+    matplotlib.rcParams['backend'] = 'Agg'
 else:
     matplotlib.rcParams['backend'] = 'Agg'
-
-import matplotlib.pyplot as plt
-
-plt.interactive(False)
 
 
 def tp(groups, df):
@@ -56,19 +58,8 @@ def tp(groups, df):
 
 
 def run(config, log_dir):
-    # std lib
-    import logging
-
-    # third party
-    import gym
-    import tensorflow as tf
-
-    # da-irl
-    from src.algos.maxent_irl import MaxEntIRL
-    from src.impl.activity_env import ActivityEnv
-    from src.impl.activity_mdp import ActivityMDP
-    from src.impl.activity_rewards import ActivityRewardFunction
-    from src.impl.expert_persona import ExpertPersonaAgent
+    logger.log("\n====Running Actor-Mimic Reward IRL Experiment on the Activity Travel Plan Domain!!====\n",
+               with_prefix=False, with_timestamp=False)
 
     ncpu = multiprocessing.cpu_count()
     if platform.system() == 'Darwin': ncpu //= 2
@@ -77,6 +68,9 @@ def run(config, log_dir):
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
     activity_env = ActivityEnv(config)
+    logger.log("\n====Loading Persona Data====\n", with_prefix=False, with_timestamp=False)
+    df = pd.read_parquet("/home/kat/data/micro_subset.parquet", engine="fastparquet")
+    groups = df.groupby('uid').groups
 
     def make_expert(idx, persona):
         def _thunk():
@@ -89,93 +83,109 @@ def run(config, log_dir):
         return _thunk
 
     if config.resume_from is None:
-
-        personas = [tp(groups, df) for _ in range(1)]
+        logger.log("\n====Training {} experts from scratch!====\n".format(config.num_experts), with_prefix=False,
+                   with_timestamp=False)
+        personas = [tp(groups, df) for _ in range(config.num_experts)]
         expert_agent = SubProcVecExpAgent(
             [make_expert(idx, persona) for idx, persona in enumerate(personas)])
-
         expert_agent.learn_reward()
-
         expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
                        izip(expert_agent.get_policy(), expert_agent.get_rewards(), expert_agent.get_theta())]
         expert_agent.close()
 
     else:
-        expert_file_data = get_expert_fnames(config.resume_from, n=50)
+        logger.log("\n====Resuming from {} with {} experts!====\n".format(config.resume_from, config.num_experts),
+                   with_prefix=False, with_timestamp=False)
+        expert_file_data = get_expert_fnames(config.resume_from, n=config.num_experts)
         expert_data = []
         for filename in expert_file_data:
             expert_data.append(joblib.load(filename))
 
     init_theta = np.squeeze(np.array([expert['theta'] for expert in expert_data])).mean(0)
     init_theta = np.expand_dims(init_theta, 1)
-    mdp = ActivityMDP(ActivityRewardFunction(activity_env, initial_theta=init_theta), 0.95, activity_env)
+    mdp = ActivityMDP(ActivityRewardFunction(activity_env, initial_theta=init_theta), config.irl_params.gamma,
+                      activity_env)
 
     teacher = ATPActorMimicIRL(mdp, expert_data)
 
-    for i in range(30):
+    for i in range(config.num_iters_amn):
         teacher.train_amn()
 
-    df = pd.read_parquet("/home/kat/data/micro_subset.parquet", engine="fastparquet")
-    groups = df.groupby('uid').groups
     nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
 
-    student_personas = [tp(groups, df) for _ in range(5)]
+    student_personas = [tp(groups, df) for _ in range(config.num_students)]
 
-    print("Training Actor Mimic Policy+Reward Students")
+    logger.log("\n====Training Actor Mimic: Policy + Reward Students====\n", with_prefix=False, with_timestamp=False)
     for idx, student_persona in enumerate(student_personas):
+        condition = "s_ampr"
+        pid = "{}_{}".format(condition, str(idx))
+        exp_dir = osp.join(log_dir, 'expert_%s' % pid)
+        logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
         mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params,
-                                                 initial_theta=teacher.reward.get_theta()), 0.95, activity_env)
+                                                 initial_theta=teacher.reward.get_theta()), config.irl_params.gamma,
+                          activity_env)
         student = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp, policy=teacher.policy),
-                                     persona=student_persona, pid="s_ampr_{}".format(
-                str(idx)))
-        student.learn_reward(skip_policy=5, iterations=100)
+                                     persona=student_persona, pid=pid)
+        student.learn_reward(skip_policy=5, iterations=config.num_iters_s + 5)
 
     tf.reset_default_graph()
 
-    print("Training Actor Mimic Policy Students")
+    logger.log("\n====Training Actor Mimic: Policy Students====", with_prefix=False, with_timestamp=False)
     for idx, student_persona in enumerate(student_personas):
+        condition = "s_amp"
+        pid = "{}_{}".format(condition, str(idx))
+        exp_dir = osp.join(log_dir, 'expert_%s' % pid)
+        logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params), 0.95, activity_env)
+        mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params), config.irl_params.gamma,
+                          activity_env)
         student = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp, policy=teacher.policy),
-                                     persona=student_persona, pid="s_amp_{}".format(
-                str(idx)))
-        student.learn_reward(skip_policy=5, iterations=100)
+                                     persona=student_persona, pid=pid)
+        student.learn_reward(skip_policy=5, iterations=config.num_iters_s + 5)
 
     tf.reset_default_graph()
 
-    print("Training Actor Mimic Reward Students")
+    logger.log("\n====Training Actor Mimic: Reward Students====\n", with_timestamp=False)
     for idx, student_persona in enumerate(student_personas):
+        condition = "s_amr"
+        pid = "{}_{}".format(condition, str(idx))
+        exp_dir = osp.join(log_dir, 'expert_%s' % pid)
+        logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
         mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params,
-                                                 initial_theta=teacher.reward.get_theta()), 0.95, activity_env)
+                                                 initial_theta=teacher.reward.get_theta()), config.irl_params.gamma,
+                          activity_env)
+
         student = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp),
-                                     persona=student_persona, pid="s_amr_{}".format(
-                str(idx)))
-        student.learn_reward(skip_policy=5, iterations=100)
+                                     persona=student_persona, pid=pid)
+        student.learn_reward(iterations=config.num_iters_s)  # Don't skip any
 
     tf.reset_default_graph()
 
-    print("Training Vanilla Students")
+    logger.log("\n====Training Vanilla Students====\n", with_timestamp=False)
     for idx, student_persona in enumerate(student_personas):
+        condition = "s_v"
+        pid = "{}_{}".format(condition, str(idx))
+        exp_dir = osp.join(log_dir, 'expert_%s' % pid)
+        logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params), 0.95, activity_env)
-        student = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp), persona=student_persona,
-                                     pid="s_v_{}".format(str(idx)))
-        student.learn_reward(iterations=100)
+        mdp = ActivityMDP(ActivityRewardFunction(activity_env, nn_params=nn_params), config.irl_params.gamma,
+                          activity_env)
 
-    logger.remove_tabular_output(tabular_log_file)
+        student = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp), persona=student_persona,
+                                     pid=pid)
+        student.learn_reward(iterations=config.num_iters_s)
+
     logger.remove_text_output(text_log_file)
 
 
 if __name__ == '__main__':
     now = datetime.datetime.now(dateutil.tz.tzlocal())
 
-    # avoid name clashes when running distributed jobs
-    rand_id = str(uuid.uuid4())[:5]
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S_%f_%Z')
 
-    default_exp_name = '_%s_%s' % (timestamp, rand_id)
+    default_exp_name = '_%s' % timestamp
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='Experiment configuration', type=str)
@@ -202,6 +212,14 @@ if __name__ == '__main__':
                         help='Name of the pickle file to resume experiment from.')
     parser.add_argument('--seed', type=int,
                         help='Random seed for numpy')
+    parser.add_argument('--num_iters_amn', type=int, default=20,
+                        help='Number of iterations for actor_mimic')
+    parser.add_argument('--num_iters_s', type=int, default=100,
+                        help='Number of iterations to train student')
+    parser.add_argument('--num_students', type=int, default=10,
+                        help='Number of students to train')
+    parser.add_argument('--num_experts', type=int, default=50,
+                        help='Number of experts in policy net')
 
     args, unparsed = parser.parse_known_args()
     root_dir = osp.dirname(osp.abspath(__file__))

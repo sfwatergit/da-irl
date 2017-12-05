@@ -9,13 +9,13 @@ from cytoolz import memoize
 from src.core.mdp import RewardFunction
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_features import ActivityFeature, create_act_at_x_features, TripFeature
-from src.util.math_utils import get_subclass_list, cartesian, create_dir_if_not_exists
+from src.util.math_utils import get_subclass_list, cartesian, create_dir_if_not_exists, normalize
 from src.util.tf_utils import fc_net
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
 else:
-    matplotlib.rcParams['backend'] = 'TkAgg'
+    matplotlib.rcParams['backend'] = 'Agg'
 
 import matplotlib.pyplot as plt
 
@@ -120,7 +120,7 @@ class ActivityRewardFunction(RewardFunction):
         return grad_theta, l2_loss, grad_norms
 
     def get_theta(self):
-        return self.sess.run(self.theta)[0]
+        return normalize(self.sess.run(self.theta)[0])
 
     def get_rewards(self):
         feed_dict = {self.input_ph: self.feature_matrix.reshape([-1, self.dim_ss])}

@@ -26,9 +26,6 @@ class ExpertPersonaAgent(ExpertAgent):
             self._identifier = self.persona.id
         else:
             self._identifier = pid
-        prefix = "pid: %s | " % self._identifier
-        logger.push_prefix(prefix)
-        logger.push_tabular_prefix(prefix)
         self._secondary_sites = self.persona.habitat.secondary_site_ids
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]

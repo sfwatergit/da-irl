@@ -1,4 +1,5 @@
 from abc import abstractproperty, ABCMeta
+import os.path as osp
 
 import six
 
@@ -30,12 +31,15 @@ class ExpertAgent(six.with_metaclass(ABCMeta)):
     def trajectories(self):
         raise NotImplementedError('Must implement trajectories method')
 
-    def learn_reward(self, skip_policy=0, iterations=0):
+    def learn_reward(self, skip_policy=0, iterations=-1):
         prefix = "pid: %s | " % self.identifier
+        tabular_log_file_pr = osp.join(self.env.config.general_params.log_dir,
+                                       osp.join("expert_{}".format(self.identifier), self.env.config.tabular_log_file))
+        logger.add_tabular_output(tabular_log_file_pr)
         logger.push_prefix(prefix)
         logger.push_tabular_prefix(prefix)
 
-        if iterations == 0:
+        if iterations == -1:
             iterations = self.env.irl_params.num_iters
         self._learning_algorithm.train(self.trajectories, iterations, skip_policy)
         params = self._learning_algorithm.get_itr_snapshot(self.env.irl_params.num_iters)
@@ -45,6 +49,7 @@ class ExpertAgent(six.with_metaclass(ABCMeta)):
 
         logger.pop_prefix()
         logger.pop_tabular_prefix()
+        logger.remove_tabular_output(tabular_log_file_pr)
 
     @property
     def reward_function(self):

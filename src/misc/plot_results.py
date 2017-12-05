@@ -2,11 +2,11 @@ import matplotlib
 import pandas as pd
 import seaborn as sns
 
-matplotlib.use('macosx')
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 plt.interactive(False)
-impor tjson
+import json
 import os
 
 """
