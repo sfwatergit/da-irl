@@ -87,9 +87,9 @@ class ActivityRewardFunction(RewardFunction):
     def make_activity_features(env, params):
         activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
         acts = [env.home_activity, env.work_activity, env.shopping_activity]
-        time_range = np.arange(0, env.horizon * env.segment_mins, env.segment_mins)
+        time_range = np.arange(0, env.horizon * env.segment_minutes, env.segment_minutes)
         prod = cartesian([acts, time_range])
-        act_at_x_features = [create_act_at_x_features(where, when, env.segment_mins, params)(env=env)
+        act_at_x_features = [create_act_at_x_features(where, when, env.segment_minutes, params)(env=env)
                              for where, when in prod]
         activity_features += act_at_x_features
         return activity_features
@@ -100,7 +100,6 @@ class ActivityRewardFunction(RewardFunction):
         self._trip_feature_ixs = range(len(self.activity_features), len(self.activity_features) +
                                        len(params.travel_params.keys()))
 
-    @memoize
     def phi(self, s, a):
         phi = np.zeros((self._dim_ss, 1), float)
         state = self._env.states[s]

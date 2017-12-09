@@ -6,6 +6,7 @@ import numpy as np
 from numpy import ndarray
 
 from src.core.mdp import FeatureExtractor, TransitionFunction
+from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPTransition, ATPAction
 
 
@@ -48,9 +49,9 @@ class TravelTimeDisutilityFeature(TripFeature):
         if isinstance(next_state, ActivityState):  # transitioning to activity
             stays = False
         if stays:
-            return np.array([state.segment_minutes / 60.])
+            return np.array([self.env.segment_minutes / 60.])
         else:
-            return np.array([state.segment_minutes / 60.])
+            return np.array([self.env.segment_minutes / 60.])
 
     def __str__(self):
         return "%s travel time disutility" % self.ident
@@ -196,8 +197,8 @@ class EarlyArrivalFeature(ActivityFeature):
 
     def __call__(self, state, action):
         # type: (ActivityState, ATPAction) -> ndarray
-        arrival_time, departure_time = state.time_index * state.segment_minutes, (
-            state.time_index + 1) * state.segment_minutes
+        arrival_time, departure_time = state.time_index * self.env.segment_minutes, (
+            state.time_index + 1) * self.env.segment_minutes
         next_state = self.T(state, action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
@@ -205,7 +206,7 @@ class EarlyArrivalFeature(ActivityFeature):
             if not isinstance(next_state, ActivityState):
                 return np.array([0])
 
-        arrival_time = next_state.time_index * next_state.segment_minutes
+        arrival_time = next_state.time_index * self.env.segment_minutes
         next_activity = next_state.state_label
         opening_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
 
@@ -230,7 +231,7 @@ class LateArrivalFeature(ActivityFeature):
             if not isinstance(next_state, ActivityState):
                 return np.array([0])
 
-        arrival_time = next_state.time_index * next_state.segment_minutes
+        arrival_time = next_state.time_index * self.env.segment_minutes
         next_activity = next_state.state_label
 
         latest_start_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
@@ -325,7 +326,7 @@ class LateArrivalFeature(ActivityFeature):
 #             return np.array([util_performing])
 
 
-def create_act_at_x_features(where, when,interval_length, params):
+def create_act_at_x_features(where, when, interval_length, params):
     name = "{}At{}Feature".format(where, when)
 
     def __init__(self, **kwargs):
@@ -338,8 +339,8 @@ def create_act_at_x_features(where, when,interval_length, params):
     def __call__(self, state, action):
         if isinstance(state, TravelState):
             return np.array([0])
-        arrival_time, departure_time = state.time_index * state.segment_minutes, (
-            state.time_index + 1) * state.segment_minutes
+        arrival_time, departure_time = state.time_index * self.env.segment_minutes, (
+            state.time_index + 1) * self.env.segment_minutes
 
         if arrival_time < self.start_period or departure_time > self.end_period:
             return np.array([0])
@@ -347,7 +348,7 @@ def create_act_at_x_features(where, when,interval_length, params):
         current_activity = state.state_label
         if current_activity != self.where:
             return np.array([0])
-        activity_end = state.get_end_time
+        activity_end = (state.time_index+1)*self.env.segment_minutes
 
         opening_time = str_to_mins(self.params.activity_params[current_activity]['openingTime'])
         closing_time = str_to_mins(self.params.activity_params[current_activity]['closingTime'])

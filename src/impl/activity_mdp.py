@@ -2,30 +2,35 @@ import numpy as np
 from cytoolz import memoize
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
-from src.util.math_utils import make_time_string
 
 
 class ATPState(State):
-    def __init__(self, state_id, state_label, time_index, segment_minutes, edge):
+    def __init__(self, state_id, state_label, time_index, mad):
         super(ATPState, self).__init__(state_id)
         self.state_label = state_label
+        self._mad = mad  # mad == maintenance/mandatory activities done
         self.time_index = time_index
-        self.segment_minutes = segment_minutes
-        self.start_time = time_index * segment_minutes
-        self.end_time = (time_index + 1) * segment_minutes
         self.available_actions = []
-        self.edge = edge
-        self.time_string = make_time_string(self.start_time)
 
     @property
-    def get_end_time(self):
-        return self.end_time
+    def mad(self):
+        return self._mad
+
+    @mad.setter
+    def mad(self, new_mad):
+        self._mad = new_mad
+
+    def __str__(self):
+        return '{}:[{}, {}]'.format(self.state_id, self.state_label, str(self._mad))
+
+    def __repr__(self):
+        return self.__str__()
 
     def __hash__(self):
-        return hash((self.state_id, self.time_index))
+        return hash((self.state_id, self.time_index, str(self._mad)))
 
     def __eq__(self, other):
-        return self.state_id == other.state_id and self.time_index == other.time_index
+        return self.state_id == other.state_id and self.time_index == other.time_index and np.all(self.mad == other.mad)
 
 
 class ATPAction(Action):
@@ -55,45 +60,33 @@ class ATPAction(Action):
 
 
 class TravelState(ATPState):
-    def __init__(self, state_id, mode, time_index, segment_minutes, edge):
-        super(TravelState, self).__init__(state_id, mode, time_index, segment_minutes, edge)
-
-    def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label,
-                                    make_time_string(self.time_index * self.segment_minutes))
-
-    def __repr__(self):
-        return self.__str__()
+    def __init__(self, state_id, mode, time_index, mad):
+        super(TravelState, self).__init__(state_id, mode, time_index, mad)
 
 
 class ActivityState(ATPState):
-    def __init__(self, state_id, activity_type, time_index, segment_minutes, edge):
-        super(ActivityState, self).__init__(state_id, activity_type, time_index, segment_minutes, edge)
-
-    def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label,
-                                    make_time_string(self.time_index * self.segment_minutes))
-
-    def __repr__(self):
-        return self.__str__()
+    def __init__(self, state_id, activity_type, time_index, mad):
+        super(ActivityState, self).__init__(state_id, activity_type, time_index, mad)
 
 
 class ATPTransition(TransitionFunction):
     def __init__(self, env):
         TransitionFunction.__init__(self, env)
 
-    @memoize
     def __call__(self, state, action, **kwargs):
-        data = [a for a in self.env.G.successors(state.edge) if
-                a[0] == action.succ_ix or (state.state_id in self.env.terminals)]
-        if len(data) > 0:
-            ns = self.env.G.node[data[0]]
-            if len(ns) > 0:
-                return np.array([(1.0, ns['attr_dict']['state'])])
-            else:
-                return np.array([(1.0, self.env.home_goal_state)])
+        if state.state_id in self.env.terminals:
+            goal_state = [s for s in self.env.home_goal_states if np.all(s.mad == state.mad)][0]
+            return np.array([(1.0, goal_state)])
         else:
-            raise ValueError('No resulting state or')
+            if action.succ_ix in self.env.maintenance_activity_set:
+                mad = self.env.maybe_increment_mad(state.mad, action.succ_ix)
+            else:
+                mad = state.mad
+            next_state = [s for s in state.available_actions if np.all(s.mad == mad) and (action.succ_ix == s.state_label)]
+            if len(next_state)>0:
+                return np.array([(1.0, next_state[0])])
+            else:
+                return np.array([(1.0, self.env.home_goal_states[0])])
 
 
 class ActivityMDP(MDP):
@@ -103,7 +96,6 @@ class ActivityMDP(MDP):
         self._env = env
         env.transition_matrix = self.transition_matrix
         env.reward_function = self.reward_function
-
 
     @memoize
     def actions(self, state):

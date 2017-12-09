@@ -129,7 +129,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             # sum-out (SA)S
             new_state_visitation = np.einsum(u'ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum(sa_visit_t, axis=2) / self.mdp.env.horizon
+        return np.sum(sa_visit_t, axis=2)
 
     def train(self, trajectories, num_iters=None, skip_policy=1):
         if num_iters is None:
@@ -191,19 +191,6 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                     policy=self.policy,
                     theta=self.reward.get_theta(),
                     reward=self.reward.get_rewards())
-
-    def _trajectory_feature_counts(self, path):
-        """
-        Compute feature counts for each state and action along a demonstration trajectory.
-
-        Args:
-            path (np.ndarray): N x (dS, dA) array representing the states and actions taken by agent
-            for a single trajectory.
-
-        Returns:
-            (np.ndarray): 1 x dF array expressing the state-action features
-        """
-        return np.sum([self.reward.phi(s, a) for s, a in path], 0)
 
     def _start_state_dist(self):
         """

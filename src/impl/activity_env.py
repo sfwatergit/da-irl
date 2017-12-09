@@ -2,9 +2,10 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
+from collections import OrderedDict
+from itertools import combinations
+
 import gym
-import multiprocessing
-import networkx as nx
 import numpy as np
 from gym.spaces import MultiDiscrete
 from gym.spaces.discrete import Discrete
@@ -19,18 +20,24 @@ class ActivityEnv(gym.Env):
 
         self.config = config
         self.irl_params = self.config.irl_params
-        self.segment_mins = self.config.profile_params.segment_minutes
-        self._horizon = int(self.irl_params.horizon / self.segment_mins)
+        self.segment_minutes = self.config.profile_params.segment_minutes
+        self._horizon = int(self.irl_params.horizon / self.segment_minutes)
         self.home_activity = self.config.home_activity
         self.work_activity = self.config.work_activity
         self.shopping_activity = self.config.shopping_activity
         self.other_activity = self.config.other_activity
         self.home_start_state = None
-        self.home_goal_state = None
+        self.home_goal_states = []
 
-        self.activity_types = self.config.activity_params.keys()
-        self.travel_modes = self.config.travel_params.keys()
-        self.nA = len(self.activity_types + self.travel_modes)
+        self.activity_labels = self.config.activity_params.keys()
+        self.travel_mode_labels = self.config.travel_params.keys()
+
+        self.activities = self.activity_labels + self.travel_mode_labels
+        self.maintenance_activity_set = {'W','w'}
+        n = len(self.maintenance_activity_set)
+        self.ma_dict = OrderedDict((v, to_onehot(k, n)) for k, v in enumerate(self.maintenance_activity_set))
+
+        self.nA = len(self.activity_labels + self.travel_mode_labels)
         self._action_rev_map = None
         self.actions = self._build_actions()
         self.__actions_space = Discrete(self.nA)
@@ -132,9 +139,9 @@ class ActivityEnv(gym.Env):
             A list of the available legal actions for the current state.
 
         """
-        if el in self.activity_types:
-            q = [k for k, v in self.actions.items() if (v.succ_ix in self.travel_modes or v.succ_ix == el)]
-        elif el in self.travel_modes:
+        if el in self.activity_labels:
+            q = [k for k, v in self.actions.items() if (v.succ_ix in self.travel_mode_labels or v.succ_ix == el)]
+        elif el in self.travel_mode_labels:
             q = self.actions.keys()
         else:
             raise ValueError("%s not Found!" % el)
@@ -142,7 +149,7 @@ class ActivityEnv(gym.Env):
 
     def _build_actions(self):
         actions = {}
-        for action_ix, el in enumerate(self.activity_types + self.travel_modes):
+        for action_ix, el in enumerate(self.activity_labels + self.travel_mode_labels):
             actions[action_ix] = ATPAction(action_ix, el)
         self._action_rev_map = dict((v.succ_ix, k) for k, v in actions.items())
         return actions
@@ -174,40 +181,83 @@ class ActivityEnv(gym.Env):
                 return id
 
     def gen_states(self):
-        g = nx.DiGraph()
-        self.home_goal_state = ActivityState(0, self.home_activity, self.horizon - 1, self.segment_mins,
-                                             (self.home_activity, self.horizon - 1))
-        self.states[0] = self.home_goal_state
-        g.add_node((self.home_activity, self.horizon - 1),
-                   attr_dict={'ix': 0, 'pos': (self.home_activity, self.horizon - 1), 'state': self.home_goal_state})
-        self.terminals.append(0)
-        state_idx = 1
-        for time in reversed(range(1, self.horizon - 1)):
-            for s, label in enumerate(self.activity_types + self.travel_modes):
-                S = ActivityState if label in self.activity_types else TravelState
-                state = S(state_idx, label, time, self.segment_mins, (label, time))
-                self.states[state_idx] = state
-                g.add_node((label, time), attr_dict={'ix': state_idx, 'pos': (label, time), 'state': state})
-                state_idx += 1
-        self.home_start_state = ActivityState(state_idx, self.home_activity, 0, self.segment_mins,
-                                              (self.home_activity, 0))
-        self.states[state_idx] = self.home_start_state
-        g.add_node((self.home_activity, 0),
-                   attr_dict={'ix': state_idx, 'pos': (self.home_activity, 0), 'state': self.home_start_state})
-        return self.gen_actions(g)
+        G = {}
+        state_idx = 0
+        # step back through time
+        for time in range(self.horizon, -1, -1):
+            G[time] = {}
+            available_activities = self.get_available_activities(time)
+            for label in available_activities:
+                G[time][label] = {}
+                # determine activity type...
+                if label in self.activity_labels:
+                    S = ActivityState
+                else:
+                    S = TravelState
+                    # compute possible maintenance activities done
+                num_possible_ma = min(time, len(self.maintenance_activity_set))
+                for i in range(num_possible_ma, -1, -1):
+                    possible_mad = combinations(self.maintenance_activity_set, i)
+                    for ma in possible_mad:
+                        if ma == () or time < 2:
+                            mad = np.zeros(len(self.maintenance_activity_set), dtype=int)
+                        else:
+                            mad = sum([self.ma_dict[a] for a in ma])
+                        state = S(state_idx, label, time, mad=mad)
+                        if time == self.horizon:
+                            self.terminals.append(state_idx)
+                            self.home_goal_states.append(state)
+                            G[time][label][str(mad)] = {'ix': state_idx, 'pos': (label, time, str(mad)), 'state': state}
+                            self.states[state_idx] = state
+                            state_idx += 1
+                            continue
+                        elif time == 0:
+                            self.home_start_state = state
+                            self.states[state_idx] = state
+                            G[time][label][str(mad)] = {'ix': state_idx, 'pos': (label, time, str(mad)), 'state': state}
+                            break
+                        else:
+                            self.states[state_idx] = state
+                            G[time][label][str(mad)] = {'ix': state_idx, 'pos': (label, time, str(mad)), 'state': state}
+                        state_idx += 1
+        return self.gen_transitions(G)
 
-    def gen_actions(self, g):
+    def gen_transitions(self, G):
         for state in self.states.values():
-            if state == self.home_goal_state:
-                action_labels = [dict((action.succ_ix, a) for a, action in self.actions.items())[self.home_activity]]
-            else:
-                action_labels = self.get_legal_actions_for_state(state.state_label)
+            action_labels = self.get_legal_actions_for_state(state.state_label)
             if len(action_labels) > 0:
                 for a in action_labels:
                     ns_el = self.actions[a].succ_ix
-                    if state == self.home_goal_state:
-                        g.add_edge(state.edge, (ns_el, state.time_index))
+                    if ns_el not in self.get_available_activities(state.time_index + 1) or (
+                            state.time_index + 1 > self.horizon):
+                        continue
+                    mad_curr = state.mad.astype(bool)
+                    if ns_el in self.maintenance_activity_set:
+                        new_mad = self.maybe_increment_mad(mad_curr, ns_el)
                     else:
-                        g.add_edge(state.edge, (ns_el, state.time_index + 1))
-                state.available_actions.extend(action_labels)
-        return g
+                        new_mad = mad_curr.astype(int)
+                    next_state = G[state.time_index + 1][ns_el][str(new_mad)]['state']
+                    state.available_actions.append(next_state)
+        return G
+
+    def maybe_increment_mad(self, mad_curr, ns_el):
+        return mad_curr.astype(int) + (self.ma_dict[ns_el].astype(bool) & ~mad_curr).astype(int)
+
+    @staticmethod
+    def make_time_string(tidx, segment_minutes):
+        """
+        Convert minutes since mignight to hrs.
+        :return: Time in HH:MM notation
+        """
+        mm = tidx * segment_minutes
+        mm_str = str(mm % 60).zfill(2)
+        hh_str = str(mm // 60).zfill(2)
+        return "{}:{}".format(hh_str, mm_str)
+
+    def get_available_activities(self, time):
+        if time == 0 or time == self.horizon:
+            return [self.home_activity]
+        elif time == 1 or time == self.horizon - 1:
+            return [self.home_activity] + self.travel_mode_labels
+        else:
+            return self.activities

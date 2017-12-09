@@ -66,7 +66,6 @@ class MDP(six.with_metaclass(ABCMeta)):
     def R(self, state, action):
         return self._reward_function(state, action)
 
-    @memoize
     def T(self, state, action):
         return self._transition(state, action)
 
@@ -76,8 +75,7 @@ class MDP(six.with_metaclass(ABCMeta)):
             P = np.zeros((self._env.nS, self._env.nA, self._env.nS))
             for state in self._env.states.values():
                 for action in [self._env.actions[a] for a in self.actions(state)]:
-                    Sp = self.T(state, action)
-                    for p, sp in Sp:
+                    for p, sp in self.T(state, action):
                         P[state.state_id, action.action_id, sp.state_id] = p
             self._P = P
         return self._P
@@ -213,7 +211,7 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
         if self._feature_matrix is None:
             self._feature_matrix = np.zeros((self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
             for state in list(self._env.states.values()):
-                actions = state.available_actions
+                actions = [self._env._action_rev_map[action.state_label] for action in state.available_actions]
                 s = state.state_id
                 for a in actions:
                     if s in self._env.terminals:
@@ -222,6 +220,7 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
                         self._feature_matrix[s, a] = self.phi(s, a).T
         return self._feature_matrix
 
+    @memoize
     def phi(self, s, a):
         state = self._env.states[s]
         if s in self._env.terminals or a == -1:

@@ -12,8 +12,8 @@ FNOPTS = dict(allow_input_downcast=True, on_unused_input='ignore')
 
 
 def to_onehot(ind, dim):
-    ret = np.zeros(dim)
-    ret[ind] = 1.0
+    ret = np.zeros(dim,dtype=int)
+    ret[ind] = 1
     return ret
 
 
@@ -34,20 +34,6 @@ def from_onehot_n(v):
 
 def flatten_list(lol):
     return [a for b in lol for a in b]
-
-
-def make_time_string(mm):
-    # type: (int) -> unicode
-    """
-    Convert minutes since mignight to hrs.
-
-    :rtype: str
-    :param mm: minutes since midnight
-    :return: Time in HH:MM notation
-    """
-    mm_str = str(mm % 60).zfill(2)
-    hh_str = str(mm // 60).zfill(2)
-    return "{}:{}".format(hh_str, mm_str)
 
 
 def t2n(hh, mm):

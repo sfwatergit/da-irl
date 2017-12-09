@@ -7,7 +7,6 @@ from src.algos.maxent_irl import MaxEntIRL
 from src.core.expert_agent import ExpertAgent
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
-from src.misc import logger
 
 
 class ExpertPersonaAgent(ExpertAgent):
@@ -65,25 +64,22 @@ class ExpertPersonaAgent(ExpertAgent):
 
     def _profile_to_trajectories(self, trajectory_matrix):
         trajectories = []
-        pbar = tqdm(trajectory_matrix, desc="Converting trajectories to state-actions")
-        for path in pbar:
+        for path in trajectory_matrix:
             states = []
             actions = []
+            mad_curr = np.zeros(len(self.env.maintenance_activity_set), dtype=bool)
             for t, step in enumerate(path):
-                tup = (step, t)
-                if tup in self.env.G.node:
-                    state_ix = self.env.G.node[tup]['attr_dict']['state'].state_id
-                    if len(states) > 0:
-                        prev_state = self.env.states[states[-1]]
-                        state = self.env.states[state_ix]
-                        s_type = state.state_label
-                        available_actions = [self.env.actions[act]
-                                             for act in prev_state.available_actions
-                                             if (s_type == self.env.actions[act].succ_ix)]
-                        if len(available_actions) == 0:
-                            available_actions = [self.env.actions[5]]
-                        act_ix = available_actions[0].action_id
-                        actions.append(act_ix)
-                    states.append(state_ix)
+                state = self.env.G[t][step][str(mad_curr.astype(int))]['state']
+                if step in self.env.maintenance_activity_set:
+                    mad_curr = self.env.maybe_increment_mad(mad_curr, step)
+                if len(states) > 0:
+                    prev_state = self.env.states[states[-1]]
+                    available_actions = prev_state.available_actions
+                    if state in available_actions:
+                        act_ix = self.env._action_rev_map[state.state_label]
+                    else:
+                        act_ix = self.env._action_rev_map[self.env.travel_mode_labels[0]]
+                    actions.append(act_ix)
+                states.append(state.state_id)
             trajectories.append(np.array(zip(states, actions)))
         return np.array(trajectories)
