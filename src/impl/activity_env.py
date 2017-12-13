@@ -33,7 +33,7 @@ class ActivityEnv(gym.Env):
         self.travel_mode_labels = self.config.travel_params.keys()
 
         self.activities = self.activity_labels + self.travel_mode_labels
-        self.maintenance_activity_set = {'W','w'}
+        self.maintenance_activity_set = {}
         n = len(self.maintenance_activity_set)
         self.ma_dict = OrderedDict((v, to_onehot(k, n)) for k, v in enumerate(self.maintenance_activity_set))
 

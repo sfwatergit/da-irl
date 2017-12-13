@@ -1,13 +1,13 @@
 {
   "generalParams": {
     "log_path": "data/logs/",
-    "profile_builder_config_file_path": "../data/misc/initial_profile_builder_config.json",
+    "profile_builder_config_file_path": "/home/sfeygin/python/da-irl/data/misc/initial_profile_builder_config.json",
     "reward_dir": "rewards",
     "images_dir": "images",
-    "run_id": "multimodal_1"
+    "run_id": "dist_hH_gt_90"
   },
   "irlParams": {
-    "traces_file_path": "data/traces/traces_persona_1.csv",
+    "traces_file_path": "/home/kat/data/micro_subset.parquet",
     "num_iters": 100,
     "horizon": 1440,
     "gamma": 0.95,

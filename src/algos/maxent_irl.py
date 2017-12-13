@@ -129,7 +129,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             # sum-out (SA)S
             new_state_visitation = np.einsum(u'ij,ijk->k', sa_visit, self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-        return np.sum(sa_visit_t, axis=2)
+        return np.sum(sa_visit_t, axis=2)/self.mdp.env.horizon
 
     def train(self, trajectories, num_iters=None, skip_policy=1):
         if num_iters is None:

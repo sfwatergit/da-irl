@@ -54,7 +54,7 @@ def tp(groups, df):
     idx = np.random.randint(0, len(groups))
     group = groups.values()[idx]
     uid_df = TraceLoader.load_traces_from_df(df.iloc[group])
-    return Persona(traces=uid_df, build_profile=True, config_file='../data/misc/initial_profile_builder_config.json')
+    return Persona(traces=uid_df, build_profile=True, config_file=config.general_params.profile_builder_config_file_path)
 
 
 def run(config, log_dir):
@@ -69,7 +69,7 @@ def run(config, log_dir):
     gym.logger.setLevel(logging.WARN)
     activity_env = ActivityEnv(config)
     logger.log("\n====Loading Persona Data====\n", with_prefix=False, with_timestamp=False)
-    df = pd.read_parquet("/home/kat/data/micro_subset.parquet", engine="fastparquet")
+    df = pd.read_parquet(config.irl_params.traces_file_path,engine="fastparquet")
     groups = df.groupby('uid').groups
 
     def make_expert(idx, persona):
@@ -79,7 +79,6 @@ def run(config, log_dir):
             mdp = ActivityMDP(ActivityRewardFunction(activity_env), config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
             return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona, idx)
-
         return _thunk
 
     if config.resume_from is None:
