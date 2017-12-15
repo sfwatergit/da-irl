@@ -41,7 +41,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
     def train_amn(self):
         #  for each available action from the state
         for expert in self.experts:
-            pi_e = expert['policy']
+            pi_e = np.squeeze(expert['policy'],0)
             # obs, acts, rews = self.sample_amn_policy(2)
             # obs = obs.reshape(-1, self.nS)
             obs = np.array([self.env.state_to_obs(self.env.states[s]) for s in

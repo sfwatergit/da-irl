@@ -4,7 +4,6 @@ import platform
 import matplotlib
 import numpy as np
 import tensorflow as tf
-from cytoolz import memoize
 
 from src.core.mdp import RewardFunction
 from src.impl.activity_env import ActivityEnv
@@ -86,7 +85,7 @@ class ActivityRewardFunction(RewardFunction):
     @staticmethod
     def make_activity_features(env, params):
         activity_features = [i(params, env=env) for i in get_subclass_list(ActivityFeature)]
-        acts = [env.home_activity, env.work_activity, env.shopping_activity]
+        acts = [env.home_activity, env.work_activity, env.other_activity]
         time_range = np.arange(0, env.horizon * env.segment_minutes, env.segment_minutes)
         prod = cartesian([acts, time_range])
         act_at_x_features = [create_act_at_x_features(where, when, env.segment_minutes, params)(env=env)
@@ -127,25 +126,28 @@ class ActivityRewardFunction(RewardFunction):
         return rewards.reshape([self._env.nS, self._env.nA])
 
     def plot_current_theta(self, ident):
-        image_path = os.path.join(self._env.config.general_params.log_dir, "expert_{}".format(ident))
+        image_path = os.path.join(self._env.config.general_params.log_dir, os.path.join(self._env.config.general_params.images_dir, "expert_{}".format(ident)))
         create_dir_if_not_exists(image_path)
-        plot_theta(self.get_theta(), image_path, ident=ident)
+        home_int = [self.activity_features.index(feat) for feat in self.activity_features if feat.ident.startswith('H')]
+        work_int = [self.activity_features.index(feat) for feat in self.activity_features if feat.ident.startswith('W')]
+        other_int = [self.activity_features.index(feat) for feat in self.activity_features if feat.ident.startswith('o')]
+        plot_theta(self.get_theta(),home_int,work_int,other_int, self._env.segment_minutes, image_path, ident=ident)
 
 
-def plot_theta(theta, image_path, show=False, ident=''):
-    home_feats = theta[4:96]
-    work_feats = theta[100:193]
-    other_feats = theta[193:-4]
-    plot_reward(home_feats, image_path, 'home', 'b', show, ident)
+def plot_theta(theta, home_int, work_int, other_int, disc_len,  image_path, show=False, ident=''):
+    home_feats = theta[home_int]
+    work_feats = theta[work_int]
+    other_feats = theta[other_int]
+    plot_reward(home_feats, disc_len, image_path, 'home', 'b', show, ident)
     plt.clf()
-    plot_reward(work_feats, image_path, 'work', 'g', show, ident)
+    plot_reward(work_feats, disc_len, image_path, 'work', 'g', show, ident)
     plt.clf()
-    plot_reward(other_feats, image_path, 'other', 'r', show, ident)
+    plot_reward(other_feats, disc_len, image_path, 'other', 'r', show, ident)
     plt.clf()
 
 
-def plot_reward(ys, image_path='', title='', color='b', show=False, ident=''):
-    xs = np.arange(0, len(ys)) * 15 / 60
+def plot_reward(ys, disc_len=15., image_path='', title='', color='b', show=False, ident=''):
+    xs = np.arange(0, len(ys)) * float(disc_len) / 60
     plt.plot(xs, ys, color)
     plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(title.capitalize()))
     plt.xlabel('time (hr)')

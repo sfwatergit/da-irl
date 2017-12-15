@@ -208,7 +208,7 @@ class EarlyArrivalFeature(ActivityFeature):
 
         arrival_time = next_state.time_index * self.env.segment_minutes
         next_activity = next_state.state_label
-        opening_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
+        opening_time = str_to_mins(self.params.activity_params[next_activity].latest_start_time)
 
         if 0 <= arrival_time < opening_time:  # arrived `segment_minutes` before open.
             hr_arrived_before_start = (opening_time - arrival_time) / 60.
@@ -234,7 +234,7 @@ class LateArrivalFeature(ActivityFeature):
         arrival_time = next_state.time_index * self.env.segment_minutes
         next_activity = next_state.state_label
 
-        latest_start_time = str_to_mins(self.params.activity_params[next_activity]['latestStartTime'])
+        latest_start_time = str_to_mins(self.params.activity_params[next_activity].latest_start_time)
 
         if 0 <= latest_start_time < arrival_time:
             hr_late = (arrival_time - latest_start_time) / 60.
@@ -350,8 +350,8 @@ def create_act_at_x_features(where, when, interval_length, params):
             return np.array([0])
         activity_end = (state.time_index+1)*self.env.segment_minutes
 
-        opening_time = str_to_mins(self.params.activity_params[current_activity]['openingTime'])
-        closing_time = str_to_mins(self.params.activity_params[current_activity]['closingTime'])
+        opening_time = str_to_mins(self.params.activity_params[current_activity].opening_time)
+        closing_time = str_to_mins(self.params.activity_params[current_activity].closing_time)
 
         activity_start = arrival_time
 

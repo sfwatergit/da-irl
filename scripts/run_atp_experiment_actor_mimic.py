@@ -5,44 +5,38 @@ from __future__ import (
     absolute_import, division, print_function, unicode_literals
 )
 
-import sys
-
-sys.path.append('../../da-irl')
-sys.path.append('../../da-irl/src')
-sys.path.append('../../common')
 # std lib
 import argparse
 import ast
 import datetime
 import json
+import logging
 import multiprocessing
 import os.path as osp
 import platform
 from itertools import izip
-import logging
 
+import dateutil
 # third party
 import gym
-import tensorflow as tf
-import numpy as np
-import pandas as pd
 import joblib
 import matplotlib
-
+import numpy as np
+import pandas as pd
+import tensorflow as tf
 from swlcommon import TraceLoader, Persona
 
 from src.algos.actor_mimic import ATPActorMimicIRL
-from src.impl.activity_config import ATPConfig
-from src.impl.parallel.parallel_population import SubProcVecExpAgent
-from src.misc import logger
-from src.util.math_utils import create_dir_if_not_exists
-from src.util.misc_utils import set_global_seeds, get_expert_fnames
 from src.algos.maxent_irl import MaxEntIRL
+from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityMDP
 from src.impl.activity_rewards import ActivityRewardFunction
 from src.impl.expert_persona import ExpertPersonaAgent
-import dateutil
+from src.impl.parallel.parallel_population import SubProcVecExpAgent
+from src.misc import logger
+from src.util.math_utils import create_dir_if_not_exists
+from src.util.misc_utils import set_global_seeds, get_expert_fnames
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'Agg'
@@ -54,7 +48,8 @@ def tp(groups, df):
     idx = np.random.randint(0, len(groups))
     group = groups.values()[idx]
     uid_df = TraceLoader.load_traces_from_df(df.iloc[group])
-    return Persona(traces=uid_df, build_profile=True, config_file=config.general_params.profile_builder_config_file_path)
+    return Persona(traces=uid_df, build_profile=True,
+                   config_file=config.general_params.profile_builder_config_file_path)
 
 
 def run(config, log_dir):
@@ -69,7 +64,16 @@ def run(config, log_dir):
     gym.logger.setLevel(logging.WARN)
     activity_env = ActivityEnv(config)
     logger.log("\n====Loading Persona Data====\n", with_prefix=False, with_timestamp=False)
-    df = pd.read_parquet(config.irl_params.traces_file_path,engine="fastparquet")
+
+    traces_path = config.irl_params.traces_file_path
+    if traces_path.endswith('csv'):
+        df = pd.read_csv(traces_path)
+    elif traces_path.endswith('parquet'):
+        df = pd.read_parquet(config.irl_params.traces_file_path, engine="fastparquet")
+    else:
+        df = pd.read_csv('../data/traces/persona_1')
+        logger.log('No traces file found... assuming test and loading default persona')
+
     groups = df.groupby('uid').groups
 
     def make_expert(idx, persona):
@@ -79,6 +83,7 @@ def run(config, log_dir):
             mdp = ActivityMDP(ActivityRewardFunction(activity_env), config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
             return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona, idx)
+
         return _thunk
 
     if config.resume_from is None:
@@ -188,7 +193,6 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='Experiment configuration', type=str)
-    parser.add_argument('--traces_dir', help='Location of trace files', type=str)
     parser.add_argument(
         '--exp_name', type=str, default=default_exp_name, help='Name of the experiment.')
     parser.add_argument('--snapshot_mode', type=str, default='last',

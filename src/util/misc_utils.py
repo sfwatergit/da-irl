@@ -1,4 +1,6 @@
 import functools
+from itertools import groupby
+
 import numpy as np
 import random
 import os
@@ -80,3 +82,12 @@ def sampling_rollout(env, policy, max_path_length):
         path_length += 1
 
     return samples
+
+def bag_by_type(data, keyfunc):
+    groups = []
+    uniquekeys = []
+    data = sorted(data, key=keyfunc)
+    for k, g in groupby(data, keyfunc):
+        groups.append(list(g))  # Store group iterator as a list
+        uniquekeys.append(k)
+    return dict((k, v) for k, v in zip(uniquekeys, groups))

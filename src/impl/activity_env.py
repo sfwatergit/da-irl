@@ -16,16 +16,20 @@ from src.util.math_utils import to_onehot
 
 class ActivityEnv(gym.Env):
     def __init__(self, config, *args, **kwargs):
-        super(ActivityEnv, self).__init__()
+        """
+        Environment with which activity-travel planning agent interact.
 
+        Args:
+            config (ATPConfig): the configuration parameters defining this environment
+        """
+        super(ActivityEnv, self).__init__()
         self.config = config
         self.irl_params = self.config.irl_params
-        self.segment_minutes = self.config.profile_params.segment_minutes
+        self.segment_minutes = int(self.config.profile_params.SEQUENCES_RESOLUTION.strip('min'))
         self._horizon = int(self.irl_params.horizon / self.segment_minutes)
-        self.home_activity = self.config.home_activity
-        self.work_activity = self.config.work_activity
-        self.shopping_activity = self.config.shopping_activity
-        self.other_activity = self.config.other_activity
+        self.home_activity = self.config.home_activity.symbol
+        self.work_activity = self.config.work_activity.symbol
+        self.other_activity = self.config.other_activity.symbol
         self.home_start_state = None
         self.home_goal_states = []
 
@@ -33,7 +37,7 @@ class ActivityEnv(gym.Env):
         self.travel_mode_labels = self.config.travel_params.keys()
 
         self.activities = self.activity_labels + self.travel_mode_labels
-        self.maintenance_activity_set = {}
+        self.maintenance_activity_set = self.config.maintenance_activity_set
         n = len(self.maintenance_activity_set)
         self.ma_dict = OrderedDict((v, to_onehot(k, n)) for k, v in enumerate(self.maintenance_activity_set))
 
