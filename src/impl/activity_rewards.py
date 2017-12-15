@@ -126,7 +126,7 @@ class ActivityRewardFunction(RewardFunction):
         return rewards.reshape([self._env.nS, self._env.nA])
 
     def plot_current_theta(self, ident):
-        image_path = os.path.join(self._env.config.general_params.log_dir, os.path.join(self._env.config.general_params.images_dir, "expert_{}".format(ident)))
+        image_path = os.path.join(self._env.config.general_params.log_dir, os.path.join("expert_{}".format(ident)),self._env.config.general_params.images_dir)
         create_dir_if_not_exists(image_path)
         home_int = [self.activity_features.index(feat) for feat in self.activity_features if feat.ident.startswith('H')]
         work_int = [self.activity_features.index(feat) for feat in self.activity_features if feat.ident.startswith('W')]
@@ -135,7 +135,7 @@ class ActivityRewardFunction(RewardFunction):
 
 
 def plot_theta(theta, home_int, work_int, other_int, disc_len,  image_path, show=False, ident=''):
-    home_feats = theta[home_int]
+    home_feats = theta[home_int[:-1]]  # last home activity is anchor (creates negative utility)
     work_feats = theta[work_int]
     other_feats = theta[other_int]
     plot_reward(home_feats, disc_len, image_path, 'home', 'b', show, ident)
