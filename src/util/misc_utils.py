@@ -1,9 +1,8 @@
-import functools
+import os
+import random
 from itertools import groupby
 
 import numpy as np
-import random
-import os
 
 
 def set_global_seeds(i):
@@ -33,7 +32,7 @@ def get_trace_fnames(trace_dir, n=2):
         m = itr_reg.match(trace_file)
         if m:
             expert_num = m.group('expert_num')
-            expert_file_data.append([expert_num,os.path.join(trace_dir, m.group())])
+            expert_file_data.append([expert_num, os.path.join(trace_dir, m.group())])
 
     expert_file_data = sorted(expert_file_data, key=lambda x: int(x[0]), reverse=False)[:n]
     for fname in expert_file_data:
@@ -68,6 +67,7 @@ def get_expert_fnames(log_dir, n=5):
     for fname in expert_file_data:
         yield fname[1]
 
+
 def sampling_rollout(env, policy, max_path_length):
     path_length = 1
     path_return = 0
@@ -77,11 +77,12 @@ def sampling_rollout(env, policy, max_path_length):
     while not terminal and path_length <= max_path_length:
         action, _ = policy.get_action(observation)
         next_observation, reward, terminal, _ = env.step(action)
-        samples.append((observation, action, reward, terminal, path_length==1, path_length))
+        samples.append((observation, action, reward, terminal, path_length == 1, path_length))
         observation = next_observation
         path_length += 1
 
     return samples
+
 
 def bag_by_type(data, keyfunc):
     groups = []
@@ -91,3 +92,40 @@ def bag_by_type(data, keyfunc):
         groups.append(list(g))  # Store group iterator as a list
         uniquekeys.append(k)
     return dict((k, v) for k, v in zip(uniquekeys, groups))
+
+
+class lazy_property(object):
+    """
+    meant to be used for lazy evaluation of an object attribute.
+    property should represent non-mutable data, as it replaces itself.
+    .. Note: https://stackoverflow.com/questions/3012421/python-memoising-deferred-lookup-property-decorator/6849299#6849299
+    """
+    def __init__(self, fget):
+
+        self.fget = fget
+        self.func_name = fget.__name__
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return None
+        value = self.fget(obj)
+        setattr(obj, self.func_name, value)
+        return value
+
+
+def make_time_string(tidx, segment_minutes):
+    """
+    Convert minutes since mignight to hrs.
+    :return: Time in HH:MM notation
+    """
+    mm = tidx * segment_minutes
+    mm_str = str(mm % 60).zfill(2)
+    hh_str = str(mm // 60).zfill(2)
+    return "{}:{}".format(hh_str, mm_str)
+
+
+def str_to_mins(time_str):
+    if time_str == 'undefined':
+        return -1  # default value
+    time_vals = map(int, time_str.split(':'))
+    return (time_vals[0] * 3600 + time_vals[1] * 60 + time_vals[2] * 60) / 60

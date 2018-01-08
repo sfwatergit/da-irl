@@ -237,7 +237,9 @@ def stub_to_json(stub_sth):
         data = dict()
         for k, v in stub_sth.kwargs.iteritems():
             data[k] = stub_to_json(v)
-        data["_name"] = stub_sth.proxy_class.__module__ + "." + stub_sth.proxy_class.__name__
+        data[
+            "_name"] = stub_sth.proxy_class.__module__ + "." + \
+                       stub_sth.proxy_class.__name__
         return data
     elif isinstance(stub_sth, StubAttr):
         return dict(
@@ -245,9 +247,11 @@ def stub_to_json(stub_sth):
             attr=stub_to_json(stub_sth.attr_name)
         )
     elif isinstance(stub_sth, StubClass):
-        return stub_sth.proxy_class.__module__ + "." + stub_sth.proxy_class.__name__
+        return stub_sth.proxy_class.__module__ + "." + \
+               stub_sth.proxy_class.__name__
     elif isinstance(stub_sth, dict):
-        return {stub_to_json(k): stub_to_json(v) for k, v in stub_sth.iteritems()}
+        return {stub_to_json(k): stub_to_json(v) for k, v in
+                stub_sth.iteritems()}
     elif isinstance(stub_sth, (list, tuple)):
         return map(stub_to_json, stub_sth)
     elif type(stub_sth) == type(lambda: None):
@@ -303,7 +307,8 @@ class StubBase(object):
         return StubMethodCall(self, "__div__", [other], dict())
 
     def __rdiv__(self, other):
-        return StubMethodCall(BinaryOp(), "rdiv", [self, other], dict())  # self, "__rdiv__", [other], dict())
+        return StubMethodCall(BinaryOp(), "rdiv", [self, other],
+                              dict())  # self, "__rdiv__", [other], dict())
 
     def __rpow__(self, power, modulo=None):
         return StubMethodCall(self, "__rpow__", [power, modulo], dict())
@@ -351,7 +356,8 @@ class StubMethodCall(StubBase, Serializable):
 
     def __str__(self):
         return "StubMethodCall(%s, %s, %s, %s)" % (
-            str(self.obj), str(self.method_name), str(self.args), str(self.kwargs))
+            str(self.obj), str(self.method_name), str(self.args),
+            str(self.kwargs))
 
 
 class StubObject(StubBase):
@@ -365,7 +371,8 @@ class StubObject(StubBase):
         self.kwargs = kwargs
 
     def __getstate__(self):
-        return dict(args=self.args, kwargs=self.kwargs, proxy_class=self.proxy_class)
+        return dict(args=self.args, kwargs=self.kwargs,
+                    proxy_class=self.proxy_class)
 
     def __setstate__(self, dict):
         self.args = dict["args"]
@@ -378,10 +385,12 @@ class StubObject(StubBase):
         # checks bypassed to allow for accesing instance fileds
         if hasattr(self.proxy_class, item):
             return StubAttr(self, item)
-        raise AttributeError('Cannot get attribute %s from %s' % (item, self.proxy_class))
+        raise AttributeError(
+            'Cannot get attribute %s from %s' % (item, self.proxy_class))
 
     def __str__(self):
-        return "StubObject(%s, *%s, **%s)" % (str(self.proxy_class), str(self.args), str(self.kwargs))
+        return "StubObject(%s, *%s, **%s)" % (
+            str(self.proxy_class), str(self.args), str(self.kwargs))
 
 
 class StubClass(StubBase):

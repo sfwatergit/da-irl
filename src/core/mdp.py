@@ -211,7 +211,7 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
         if self._feature_matrix is None:
             self._feature_matrix = np.zeros((self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
             for state in list(self._env.states.values()):
-                actions = [self._env._action_rev_map[action.state_label] for action in state.available_actions]
+                actions = [self._env._action_rev_map[action.symbol] for action in state.available_actions]
                 s = state.state_id
                 for a in actions:
                     if s in self._env.terminals:

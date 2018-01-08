@@ -1,17 +1,12 @@
 import numpy as np
 from swlcommon import TraceLoader
 from swlcommon.personatrainer.persona import Persona
-from tqdm import tqdm
 
-from src.algos.maxent_irl import MaxEntIRL
 from src.core.expert_agent import ExpertAgent
-from src.impl.activity_config import ATPConfig
-from src.impl.activity_env import ActivityEnv
 
 
 class ExpertPersonaAgent(ExpertAgent):
     def __init__(self, config, env, learning_algorithm=None, persona=None, pid=None):
-        # type: (ATPConfig, ActivityEnv, MaxEntIRL, Persona) -> ExpertPersonaAgent
         super(ExpertPersonaAgent, self).__init__(config, env, learning_algorithm)
 
         if persona is None:
@@ -67,16 +62,16 @@ class ExpertPersonaAgent(ExpertAgent):
         for path in trajectory_matrix:
             states = []
             actions = []
-            mad_curr = np.zeros(len(self.env.maintenance_activity_set), dtype=bool)
+            mad_curr = np.zeros(len(self.env.mandatory_activity_set), dtype=bool)
             for t, step in enumerate(path):
                 state = self.env.G[t][step][str(mad_curr.astype(int))]['state']
-                if step in self.env.maintenance_activity_set:
-                    mad_curr = self.env.maybe_increment_mad(mad_curr, step)
+                if step in self.env.mandatory_activity_set:
+                    mad_curr = self.env._maybe_increment_mad(mad_curr, step)
                 if len(states) > 0:
                     prev_state = self.env.states[states[-1]]
                     available_actions = prev_state.available_actions
                     if state in available_actions:
-                        act_ix = self.env._action_rev_map[state.state_label]
+                        act_ix = self.env._action_rev_map[state.symbol]
                     else:
                         act_ix = self.env._action_rev_map[self.env.travel_mode_labels[0]]
                     actions.append(act_ix)

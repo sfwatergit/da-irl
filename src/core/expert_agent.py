@@ -1,5 +1,5 @@
-from abc import abstractproperty, ABCMeta
 import os.path as osp
+from abc import abstractproperty, ABCMeta
 
 import six
 
@@ -11,7 +11,6 @@ from src.misc import logger
 
 class ExpertAgent(six.with_metaclass(ABCMeta)):
     def __init__(self, config, env, learning_algorithm):
-        # type: (ATPConfig, ActivityEnv, MaxEntIRL) -> ExpertAgent
         """PersonaAgent representation.
 
         Args:
@@ -34,15 +33,19 @@ class ExpertAgent(six.with_metaclass(ABCMeta)):
     def learn_reward(self, skip_policy=0, iterations=-1):
         prefix = "pid: %s | " % self.identifier
         tabular_log_file_pr = osp.join(self.env.config.general_params.log_dir,
-                                       osp.join("expert_{}".format(self.identifier), self.env.config.tabular_log_file))
+                                       osp.join(
+                                           "expert_{}".format(self.identifier),
+                                           self.env.config.tabular_log_file))
         logger.add_tabular_output(tabular_log_file_pr)
         logger.push_prefix(prefix)
         logger.push_tabular_prefix(prefix)
 
         if iterations == -1:
             iterations = self.env.irl_params.num_iters
-        self._learning_algorithm.train(self.trajectories, iterations, skip_policy)
-        params = self._learning_algorithm.get_itr_snapshot(self.env.irl_params.num_iters)
+        self._learning_algorithm.train(self.trajectories, iterations,
+                                       skip_policy)
+        params = self._learning_algorithm.get_itr_snapshot(
+            self.env.irl_params.num_iters)
         params.update({'agent': self.identifier})
         logger.save_itr_params(self.env.irl_params.num_iters, params)
         self._learning_algorithm.reward.plot_current_theta(self.identifier)

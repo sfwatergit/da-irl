@@ -37,9 +37,6 @@ import matplotlib.pyplot as plt
 plt.interactive(False)
 
 
-
-
-
 def run(config, log_dir):
     # std lib
     import logging
@@ -60,7 +57,8 @@ def run(config, log_dir):
 
     ncpu = multiprocessing.cpu_count()
     if platform.system() == 'Darwin': ncpu //= 2
-    tf_config = tf.ConfigProto(allow_soft_placement=True, intra_op_parallelism_threads=ncpu,
+    tf_config = tf.ConfigProto(allow_soft_placement=True,
+                               intra_op_parallelism_threads=ncpu,
                                inter_op_parallelism_threads=ncpu)
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
@@ -74,24 +72,32 @@ def run(config, log_dir):
             logger.set_snapshot_dir(exp_dir)
             uid_df = TraceLoader.load_traces_from_csv(trace_file)
             persona = Persona(traces=uid_df, build_profile=True,
-                              config_file=config.general_params.profile_builder_config_file_path)
-            mdp = ActivityMDP(ActivityRewardFunction(activity_env), config.irl_params.gamma, activity_env)
+                              config_file=config.general_params
+                              .profile_builder_config_file_path)
+            mdp = ActivityMDP(ActivityRewardFunction(activity_env),
+                              config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
-            return ExpertPersonaAgent(config, activity_env, learning_algorithm, persona, idx)
+            return ExpertPersonaAgent(config, activity_env, learning_algorithm,
+                                      persona, idx)
 
         return _thunk
 
     expert_agent = SubProcVecExpAgent(
-        [make_expert(idx, trace_file) for idx, trace_file in enumerate(trace_files)])
+        [make_expert(idx, trace_file) for idx, trace_file in
+         enumerate(trace_files)])
 
     expert_agent.learn_reward()
 
     expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
-                   izip(expert_agent.get_policy(), expert_agent.get_rewards(), expert_agent.get_theta())]
+                   izip(expert_agent.get_policy(), expert_agent.get_rewards(),
+                        expert_agent.get_theta())]
 
-    init_theta = np.mean(np.array([expert_data[0]['theta'], expert_data[1]['theta']]), 0).reshape(-1, 1)
+    init_theta = np.mean(
+        np.array([expert_data[0]['theta'], expert_data[1]['theta']]),
+        0).reshape(-1, 1)
 
-    # mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env, initial_theta=init_theta), 0.99, activity_env)
+    # mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env,
+    # initial_theta=init_theta), 0.99, activity_env)
     #
     # model = ATPActorMimicIRL(mdp, expert_data)
     #
@@ -100,7 +106,6 @@ def run(config, log_dir):
     # for i in range(30):
     #     model.train_amn()
     # model.train(dummy_expert.trajectories)
-
 
     plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')
@@ -122,9 +127,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='Experiment configuration', type=str)
-    parser.add_argument('--traces_dir', help='Location of trace files', type=str)
+    parser.add_argument('--traces_dir', help='Location of trace files',
+                        type=str)
     parser.add_argument(
-        '--exp_name', type=str, default=default_exp_name, help='Name of the experiment.')
+        '--exp_name', type=str, default=default_exp_name,
+        help='Name of the experiment.')
     parser.add_argument('--snapshot_mode', type=str, default='last',
                         help='Mode to save the snapshot. Can be either "all" '
                              '(all iterations will be saved), "last" (only '
@@ -139,10 +146,13 @@ if __name__ == '__main__':
                         help='Name of the text log file (in pure text).')
     parser.add_argument('--plot', type=ast.literal_eval, default=False,
                         help='Whether to plot the iteration results')
-    parser.add_argument('--log_tabular_only', type=ast.literal_eval, default=False,
-                        help='Whether to only print the tabular log information (in a horizontal format)')
+    parser.add_argument('--log_tabular_only', type=ast.literal_eval,
+                        default=False,
+                        help='Whether to only print the tabular log '
+                             'information (in a horizontal format)')
     parser.add_argument('--resume_from', type=str, default=None,
-                        help='Name of the pickle file to resume experiment from.')
+                        help='Name of the pickle file to resume experiment '
+                             'from.')
     parser.add_argument('--seed', type=int,
                         help='Random seed for numpy')
 
@@ -150,10 +160,10 @@ if __name__ == '__main__':
 
     root_dir = osp.dirname(osp.abspath(__file__))
     config_file = osp.join(root_dir, args.config)
+
     with open(config_file) as fp:
-        config = ATPConfig(data=json.load(fp), json_file=args.config)
-        # TODO: This is a hacky way to combine file-based and cli config params... fix this!
-        config._to_dict().update(args.__dict__)
+        config = ATPConfig(data=json.load(fp))
+        config.update(args.__dict__)
     if args.seed is not None:
         set_global_seeds(config.seed)
         # set_seed(args.seed)
@@ -162,7 +172,7 @@ if __name__ == '__main__':
     exp_name = config.general_params.run_id + default_exp_name
 
     log_dir = osp.join(default_log_dir, exp_name)
-    config.general_params._to_dict().update({'log_dir':log_dir})
+    config.general_params._to_dict().update({'log_dir': log_dir})
 
     tabular_log_file = osp.join(log_dir, config.tabular_log_file)
     text_log_file = osp.join(log_dir, config.text_log_file)

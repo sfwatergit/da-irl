@@ -5,12 +5,13 @@ from src.core.mdp import TransitionFunction, State, Action, MDP
 
 
 class ATPState(State):
-    def __init__(self, state_id, state_label, time_index, mad):
+    def __init__(self, state_id, symbol, time_index, mad, reachable_symbols):
         super(ATPState, self).__init__(state_id)
-        self.state_label = state_label
-        self._mad = mad  # mad == maintenance/mandatory activities done
+        self.symbol = symbol
+        self._mad = mad  # mad == mandatory/mandatory activities done
         self.time_index = time_index
-        self.available_actions = []
+        self.next_states = []
+        self.reachable_symbols = reachable_symbols
 
     @property
     def mad(self):
@@ -21,7 +22,7 @@ class ATPState(State):
         self._mad = new_mad
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.state_label, str(self._mad))
+        return '{}:[{}, {}]'.format(self.state_id, self.symbol, str(self._mad))
 
     def __repr__(self):
         return self.__str__()
@@ -30,7 +31,9 @@ class ATPState(State):
         return hash((self.state_id, self.time_index, str(self._mad)))
 
     def __eq__(self, other):
-        return self.state_id == other.state_id and self.time_index == other.time_index and np.all(self.mad == other.mad)
+        return self.state_id == other.state_id and self.time_index == \
+               other.time_index and np.all(
+            self.mad == other.mad)
 
 
 class ATPAction(Action):
@@ -60,13 +63,20 @@ class ATPAction(Action):
 
 
 class TravelState(ATPState):
-    def __init__(self, state_id, mode, time_index, mad):
-        super(TravelState, self).__init__(state_id, mode, time_index, mad)
+    def __init__(self, state_id, mode, time_index, mad, reachable_symbols):
+        super(TravelState, self).__init__(state_id, mode, time_index, mad,
+                                          reachable_symbols)
 
 
 class ActivityState(ATPState):
-    def __init__(self, state_id, activity_type, time_index, mad):
-        super(ActivityState, self).__init__(state_id, activity_type, time_index, mad)
+    """
+    Denotes the current activity at the current time slice, inclusive of all
+    other components of the activity state.
+    """
+    def __init__(self, state_id, activity_type, time_index, mad,
+                 reachable_symbols):
+        super(ActivityState, self).__init__(state_id, activity_type, time_index,
+                                            mad, reachable_symbols)
 
 
 class ATPTransition(TransitionFunction):
@@ -75,15 +85,17 @@ class ATPTransition(TransitionFunction):
 
     def __call__(self, state, action, **kwargs):
         if state.state_id in self.env.terminals:
-            goal_state = [s for s in self.env.home_goal_states if np.all(s.mad == state.mad)][0]
+            goal_state = [s for s in self.env.home_goal_states if
+                          np.all(s.mad == state.mad)][0]
             return np.array([(1.0, goal_state)])
         else:
-            if action.succ_ix in self.env.maintenance_activity_set:
-                mad = self.env.maybe_increment_mad(state.mad, action.succ_ix)
+            if action.succ_ix in self.env.mandatory_activity_set:
+                mad = self.env._maybe_increment_mad(state.mad, action.succ_ix)
             else:
                 mad = state.mad
-            next_state = [s for s in state.available_actions if np.all(s.mad == mad) and (action.succ_ix == s.state_label)]
-            if len(next_state)>0:
+            next_state = [s for s in state.available_actions if
+                          np.all(s.mad == mad) and (action.succ_ix == s.symbol)]
+            if len(next_state) > 0:
                 return np.array([(1.0, next_state[0])])
             else:
                 return np.array([(1.0, self.env.home_goal_states[0])])
@@ -99,7 +111,7 @@ class ActivityMDP(MDP):
 
     @memoize
     def actions(self, state):
-        return self._env.get_legal_actions_for_state(state.state_label)
+        return self._env.get_legal_actions_for_state(state.symbol)
 
     @property
     def S(self):

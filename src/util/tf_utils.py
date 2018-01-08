@@ -23,7 +23,7 @@ def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
             b = tf.get_variable("b", shape=[n_output],
                                 initializer=tf.constant_initializer(.0, dtype=tf.float32))
         fc1 = tf.add(tf.matmul(x, W), b)
-        if not activation_fn is None:
+        if activation_fn is not None:
             fc1 = activation_fn(fc1)
     return fc1
 
@@ -35,12 +35,12 @@ def fc_net(X, n_layers=2, dim_out=1, dim_hidden=32, act=tf.nn.elu,
         for i in range(n_layers):
             out = fc(out, dim_hidden, scope='fc%d_%s'.format(name) % i, activation_fn=act,
                      initializer=init)
-    out = fc(out, dim_out, scope='fc%s_%s' % ('out',name), activation_fn=out_act,
+    out = fc(out, dim_out, scope='fc%s_%s' % ('out', name), activation_fn=out_act,
              initializer=init)
     return out
 
 
-def compile_function(inputs, outputs, log_name=None):
+def compile_function(inputs, outputs):
     def run(*input_vals):
         sess = tf.get_default_session()
         return sess.run(outputs, feed_dict=dict(zip(inputs, input_vals)))
@@ -63,14 +63,6 @@ def unflatten_tensors(flattened, tensor_shapes):
     tensor_sizes = map(np.prod, tensor_shapes)
     indices = np.cumsum(tensor_sizes)[:-1]
     return map(lambda pair: np.reshape(pair[0], pair[1]), zip(np.split(flattened, indices), tensor_shapes))
-
-
-def lrelu(x, leak=0.2):
-    """
-    Leaky ReLU
-    """
-    return tf.maximum(x, leak * x)
-
 
 # ================================================================
 # Make consistent with numpy
@@ -179,7 +171,7 @@ class TfInput(object):
         """
         raise NotImplemented()
 
-    def make_feed_dict(data):
+    def make_feed_dict(self, data):
         """Given data input it to the placeholder(s)."""
         raise NotImplemented()
 
@@ -187,7 +179,7 @@ class TfInput(object):
 class PlacholderTfInput(TfInput):
     def __init__(self, placeholder):
         """Wrapper for regular tensorflow placeholder."""
-        super().__init__(placeholder.name)
+        super(PlacholderTfInput).__init__(placeholder.name)
         self._placeholder = placeholder
 
     def get(self):
@@ -210,7 +202,7 @@ class BatchInput(PlacholderTfInput):
         name: str
             name of the underlying placeholder
         """
-        super().__init__(tf.placeholder(dtype, [None] + list(shape), name=name))
+        super(PlacholderTfInput).__init__(tf.placeholder(dtype, [None] + list(shape), name=name))
 
 
 class Uint8Input(PlacholderTfInput):
@@ -228,9 +220,9 @@ class Uint8Input(PlacholderTfInput):
             name of the underlying placeholder
         """
 
-        super().__init__(tf.placeholder(tf.uint8, [None] + list(shape), name=name))
+        super(Uint8Input).__init__(tf.placeholder(tf.uint8, [None] + list(shape), name=name))
         self._shape = shape
-        self._output = tf.cast(super().get(), tf.float32) / 255.0
+        self._output = tf.cast(super(Uint8Input).get(), tf.float32) / 255.0
 
     def get(self):
         return self._output
@@ -347,7 +339,7 @@ def save_state(fname):
 # ================================================================
 
 def normc_initializer(std=1.0):
-    def _initializer(shape, dtype=None, partition_info=None):  # pylint: disable=W0613
+    def _initializer(shape):  # pylint: disable=W0613
         out = np.random.randn(*shape).astype(np.float32)
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
@@ -355,8 +347,8 @@ def normc_initializer(std=1.0):
     return _initializer
 
 
-def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float32, collections=None,
-           summary_tag=None):
+def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", dtype=tf.float32,
+           collections=None, summary_tag=None):
     with tf.variable_scope(name):
         stride_shape = [1, stride[0], stride[1], 1]
         filter_shape = [filter_size[0], filter_size[1], int(x.get_shape()[3]), num_filters]
@@ -379,8 +371,7 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME", 
         if summary_tag is not None:
             tf.summary.image(summary_tag,
                              tf.transpose(tf.reshape(w, [filter_size[0], filter_size[1], -1, 1]),
-                                          [2, 0, 1, 3]),
-                             max_images=10)
+                                          [2, 0, 1, 3]), max_outputs=10)
 
         return tf.nn.conv2d(x, w, stride_shape, pad) + b
 
@@ -532,10 +523,11 @@ class _MemFriendlyFunction(object):
         data_vals = inputvals[len(self.nondata_inputs):]
         feed_dict = dict(zip(self.nondata_inputs, nondata_vals))
         n = data_vals[0].shape[0]
+        results = []
         for v in data_vals[1:]:
             assert v.shape[0] == n
         for i_start in range(0, n, self.batch_size):
-            slice_vals = [v[i_start:builtins.min(i_start + self.batch_size, n)] for v in data_vals]
+            slice_vals = [v[i_start:min(i_start + self.batch_size, n)] for v in data_vals]
             for (var, val) in zip(self.data_inputs, slice_vals):
                 feed_dict[var] = val
             results = tf.get_default_session().run(self.outputs, feed_dict=feed_dict)

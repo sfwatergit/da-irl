@@ -6,7 +6,8 @@ import jsonpickle
 
 class ConfigManager(object):
     """
-    Configuration class designed to be subclassed in order to provide extra params or override
+    Configuration class designed to be subclassed in order to provide extra
+    params or override
     defaults.
 
     """
@@ -25,8 +26,9 @@ class ConfigManager(object):
             jdata = json.load(f)
             for k, v in jdata.items():
                 self.__dict__[k] = v
-        logging.log(level=logging.INFO, msg="Using custom config file in {}: ({})".format(
-            self.__class__.__name__, self._json_file, ))
+        logging.log(level=logging.INFO,
+                    msg="Using custom config file in {}: ({})".format(
+                        self.__class__.__name__, self._json_file, ))
 
     def save_to_file(self, filename=None):
         """ Save the parameters to file
@@ -39,14 +41,23 @@ class ConfigManager(object):
                 encoded = jsonpickle.encode(self)
                 f.write(encoded)
         except IOError:
-            logging.log(level=logging.ERROR, msg='Must provide a filename if not loading from '
-                                                 'config.')
+            logging.log(level=logging.ERROR,
+                        msg='Must provide a filename if not loading from '
+                            'config.')
+
+    def update(self, params):
+        """
+
+        Args:
+            params (dict):
+        """
+        self.__dict__.update(params)
 
     def _to_dict(self):
         return self.__dict__
 
     def __repr__(self):
-        return self._to_dict().__repr__()
+        return self.__str__()
 
     def __str__(self):
         d = self._to_dict()

@@ -1,0 +1,89 @@
+{
+  "general_params": {
+    "log_path": "data/logs/",
+    "profile_builder_config_file_path": "data/misc/initial_profile_builder_config.json",
+    "traces_file_path": "/home/kat/data/micro_subset.parquet",
+    "reward_dir": "rewards",
+    "images_dir": "images",
+    "run_id": "single_agent"
+  },
+  "irl_params": {
+    "num_iters": 100,
+    "horizon": 1440,
+    "gamma": 0.95,
+    "avi_tol": 1e-2
+  },
+  "household_data": {
+    "household_id": 0,
+    "members": [
+      {
+        "agent_id": 0,
+        "activity_params": {
+          "H": {
+            "closing_time": "undefined",
+            "earliest_end_time": "undefined",
+            "latest_start_time": "undefined",
+            "minimal_duration": "08:00:00",
+            "opening_time": "undefined",
+            "typical_duration": "12:00:00",
+            "site_type": "home",
+            "is_mandatory": false,
+            "is_joint": true
+          },
+          "h": {
+            "closing_time": "undefined",
+            "earliest_end_time": "undefined",
+            "latest_start_time": "undefined",
+            "minimal_duration": "08:00:00",
+            "opening_time": "undefined",
+            "typical_duration": "12:00:00",
+            "site_type": "secondary_home",
+            "is_mandatory": false,
+            "is_joint": true
+          },
+          "W": {
+            "closing_time": "18:00:00",
+            "earliest_end_time": "undefined",
+            "latest_start_time": "09:00:00",
+            "minimal_duration": "06:00:00",
+            "opening_time": "07:00:00",
+            "typical_duration": "08:00:00",
+            "site_type": "work",
+            "is_mandatory": true,
+            "is_joint": false
+          },
+          "w": {
+            "closing_time": "18:00:00",
+            "earliest_end_time": "undefined",
+            "latest_start_time": "09:00:00",
+            "minimal_duration": "06:00:00",
+            "opening_time": "07:00:00",
+            "typical_duration": "08:00:00",
+            "site_type": "secondary_work",
+            "is_mandatory": false,
+            "is_joint": false
+          },
+          "o": {
+            "closing_time": "undefined",
+            "earliest_end_time": "undefined",
+            "latest_start_time": "undefined",
+            "minimal_duration": "undefined",
+            "opening_time": "07:00:00",
+            "typical_duration": "undefined",
+            "site_type": "other",
+            "is_mandatory": false,
+            "is_joint": true
+          }
+        },
+        "travel_params": {
+          "-": {
+            "constant": 0.0,
+            "marginal_utility_of_distance_util_m": 0.0,
+            "marginal_utility_of_distance_util_hr": -6.0,
+            "site_type": "travel"
+          }
+        }
+      }
+    ]
+  }
+}

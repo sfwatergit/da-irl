@@ -22,9 +22,9 @@ class TMDPTransition(TransitionFunction):
 
 
 class TMDPState(State):
-    def __init__(self, state_id, state_label, time_index):
+    def __init__(self, state_id, symbol, time_index):
         super(TMDPState, self).__init__(state_id)
-        self.state_label = state_label
+        self.symbol = symbol
         self.time_index = time_index
         self.time_label = make_time_string(self.time_index)
         self._actions = {}
@@ -50,7 +50,7 @@ class TMDPState(State):
         return self.state_id == other.state_id and self.time_index == other.time_index
 
     def __str__(self):
-        return '[{} @ {}]'.format(self.state_label, self.time_label)
+        return '[{} @ {}]'.format(self.symbol, self.time_label)
 
     def __repr__(self):
         return self.__str__()
@@ -320,7 +320,7 @@ def init_test_rewards(states):
     rewards = np.zeros([dim_s, dim_s], dtype=np.float32)
     for s_from in states:
         for s_to in states:
-            if s_to.state_label == 'Work' and s_from.state_label != 'Work':
+            if s_to.symbol == 'Work' and s_from.symbol != 'Work':
                 a, b = s_to.time_label.split(":")
                 time = t2n(*tuple([int(e) for e in (a, b)]))
                 if time < t2n(11, 00):
