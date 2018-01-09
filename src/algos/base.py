@@ -8,5 +8,5 @@ class RLAlgorithm(Algorithm):
 
 
 class IRLAlgorithm(Algorithm):
-    def train(self, trajectories):
+    def train(self, trajectories, num_iters):
         raise NotImplementedError

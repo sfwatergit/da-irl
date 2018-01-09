@@ -1,3 +1,5 @@
+"""Contains the main Maximum Entropy IRL code for
+"""
 # coding=utf-8
 from __future__ import (
     absolute_import, division, print_function, unicode_literals
@@ -17,44 +19,46 @@ INF = np.nan_to_num([1 * float("-inf")])
 
 
 class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
-    """
-       Base class for maximum entropy inverse reinforcement learning agents
-
-        Attributes:
-            expert_demos: set of demonstrations used for IRL
-
-       References:
-         .. [1] Ziebart, B. D., & Maas, A. (2008). Maximum entropy inverse
-         reinforcement learning.
-           Twenty-Second Conference on Artificial Intelligence (AAAI),
-           1433–1438.
-       """
 
     def __init__(self, mdp, avi_tol=1e-4, verbose=False, policy=None):
-        """
+        """Base class for maximum entropy inverse reinforcement learning agents.
+
+        Subsumes linear and deep reward function variants.
+
+        References:
+            .. [1] Ziebart, B. D., & Maas, A. (2008). Maximum entropy inverse
+                   reinforcement learning. Twenty-Second Conference on
+                   Artificial Intelligence (AAAI), 1433–1438.
+            .. [2] Wulfmeier, M., Ondruska, P., Posner, I., (2015).
+                   Maximum Entropy Deep Inverse Reinforcement Learning. arXiv
+                   1–9.
 
         Args:
-            avi_tol (float): convergence tolerance used to compute softmax
-            value iteration
-            mdp  (core.mdp.MDP): the mdp describing the expert agent's dynamics
+            policy (nd.array): Policy prior. May be used to initialize
+            forward algorithm.
+            avi_tol (float): Convergence tolerance used to compute softmax
+                             value iteration.
+            mdp  (core.mdp.MDP): The mdp describing the expert agent's dynamics.
+
+        Attr:
+            expert_demos (nd.array): dim_S x dim_A set of demonstrations used
+            for IRL.
+            VERBOSE (bool): Whether to write verbose output to log (off by
+            default).
+
         """
         self.avi_tol = avi_tol
         self.mdp = mdp
         self.nS = len(self.mdp.S)
         self.nA = len(self.mdp.A)
-
         self.expert_demos = None
+        self.VERBOSE = verbose
+
         self._policy = policy
         self._reward = self.mdp.reward_function
-        self._dim_ss = mdp.reward_function.dim_ss
+        self._dim_feature_space = mdp.reward_function.dim_ss
         self._total_num_paths = None
         self._max_path_length = 0
-
-        # Stats
-        self.feature_diff = []
-        self.theta_hist = []
-        self.log_lik_hist = []
-        self.VERBOSE = verbose
 
     @property
     def reward(self):
@@ -65,8 +69,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         return self._policy
 
     def get_empirical_savf(self):
-        """
-           Find the empirical state-action visitation frequency distribution
+        """Find the empirical state-action visitation frequency distribution
            (normalized state-action occupancy counts) induced by expert
            demonstrations.
 
@@ -83,16 +86,8 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         return savf
 
     def approximate_value_iteration(self):
-        """
-        Computes maximum entropy policy given current reward function and
-        horizon
-        via softmax value iteration.
-
-        Args:
-            gamma (float): Discount factor used to guarantee convergence of
-            infinite horizon MDPs
-            reward (np.ndarray): Current value of parametrized reward function.
-            T (int): Finite time horizon for computing state frequencies.
+        """Computes maximum entropy policy given current reward function and
+        horizon via softmax value iteration.
 
         Returns:
             policy (np.ndarray):  An S x A policy based on reward parameters.
@@ -115,8 +110,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         return pi
 
     def state_visitation_frequency(self):
-        """
-        Given the policy estimated at this iteration, computes the frequency
+        """Given the policy estimated at this iteration, computes the frequency
         with which a state and action are visited.
 
         Returns:
@@ -136,15 +130,24 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                                              self.mdp.transition_matrix)
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
             #  Sum out over SA, but we need to normalize by horizon here.
-            # This is different from Ziebart's algorithm, but if we do not,
-            # we get a poor learning signal. This seems to be standard in
-            # implementations.
+            #  This is different from Ziebart's algorithm, but if we do not,
+            #  we get a poor learning signal. This seems to be standard in
+            #  implementations.
         return np.sum(sa_visit_t, axis=2) / self.mdp.env.horizon
 
-    def train(self, trajectories, num_iters=None, skip_policy=1):
+    def train(self, expert_demos, num_iters, policy_skip_iters=1):
+        """Train the IRL algorithm using the provided demonstrations.
+
+        Args:
+            expert_demos (nd.array): Expert demonstrations used for training
+            IRL.
+            num_iters (int): Number of iterations for training.
+            policy_skip_iters (int): Number of iterations to skip forward
+            policy training.
+        """
         if num_iters is None:
             num_iters = self.mdp.env.config.irl_params.num_iters
-        self.expert_demos = trajectories
+        self.expert_demos = expert_demos
         self._max_path_length = sum(len(path) for path in self.expert_demos)
 
         # Get expert's normalized, demonstrated (empirical) state visitation
@@ -161,8 +164,9 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 # Compute the policy using approximate (softmax) value iteration
                 logger.log("Computing policy...")
                 polopt_start_time = time.time()
-                if skip_policy > 0:  # (relevant if using actor-mimic algo)
-                    skip_policy -= 1
+                if policy_skip_iters > 0:  # (relevant if using actor-mimic
+                    # algo)
+                    policy_skip_iters -= 1
                 else:
                     self._policy = self.approximate_value_iteration()
                 logger.log("Computed policy in {:,.2f} seconds".format(
@@ -184,7 +188,6 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 # Compute stats
                 avg_feature_diff = np.max(np.abs(grad_theta[0]))
                 log_lik = self._log_likelihood()
-                self.log_lik_hist.append(log_lik)
 
                 # Record iteration stats
                 logger.record_tabular("Gradient (feature diff)",
@@ -196,14 +199,25 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                 logger.dump_tabular(with_prefix=False)
 
     def get_itr_snapshot(self, epoch):
+        """Provide the current (epoch) snapshot of the learned quantities.
+
+        Args:
+            epoch (int): the epoch (just a label) for which to return the
+            snapshot data.
+
+        Returns:
+            dict[str,obj]: A dictionary containing the current reward
+            function parameter values,
+                           the value of the rewards, and the policy.
+
+        """
         return dict(epoch=epoch,
                     policy=self.policy,
                     theta=self.reward.get_theta(),
                     reward=self.reward.get_rewards())
 
     def _start_state_dist(self):
-        """
-        Computes empirical distribution of states over state space from
+        """Computes empirical distribution of states over state space from
         demonstration trajectories.
 
         Returns:
@@ -217,8 +231,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         return start_state_count.astype(float) / len(start_states)
 
     def _log_likelihood(self):
-        """
-        Compute the log-likelihood of policy evaluated over demonstrations.
+        """Compute the log-likelihood of policy evaluated over demonstrations.
 
         Returns:
             (float): Log-likelihood value.
@@ -229,8 +242,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
     @staticmethod
     def _compute_policy(q_fn, ent_wt=1.0):
-        """
-        Return a stochastic policy (softmax distribution over actions given
+        """Return a stochastic policy (softmax distribution over actions given
         current state) by normalizing a Q-function.
 
         Args:
