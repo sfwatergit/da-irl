@@ -6,13 +6,17 @@ from src.core.expert_agent import ExpertAgent
 
 
 class ExpertPersonaAgent(ExpertAgent):
-    def __init__(self, config, env, learning_algorithm=None, persona=None, pid=None):
-        super(ExpertPersonaAgent, self).__init__(config, env, learning_algorithm)
+    def __init__(self, person_model, env, learning_algorithm=None, persona=None,
+                 pid=None):
+        super(ExpertPersonaAgent, self).__init__(person_model, env,
+                                                 learning_algorithm)
 
         if persona is None:
-            traces = TraceLoader.load_traces_from_csv(config.irl_params.traces_file_path)
+            traces = TraceLoader.load_traces_from_csv(
+                person_model.irl_params.traces_file_path)
             self.persona = Persona(traces=traces, build_profile=True,
-                                   config_file=self._config.general_params.profile_builder_config_file_path)
+                                   config_file=self._person_model.general_params.
+                                   profile_builder_config_file_path)
         else:
             self.persona = persona
 
@@ -24,7 +28,8 @@ class ExpertPersonaAgent(ExpertAgent):
         self._work = self.persona.works[0]
         self._home = self.persona.homes[0]
         self._profile = np.array(
-            self._filter_trajectories_not_starting_and_ending_at_home(self.persona.get_activity_blanket_as_array()),
+            self._filter_trajectories_not_starting_and_ending_at_home(
+                self.persona.get_activity_blanket_as_array()),
             dtype='S16')
         self._trajectories = None
 
@@ -50,10 +55,12 @@ class ExpertPersonaAgent(ExpertAgent):
             self._trajectories = self._profile_to_trajectories(self._profile)
         return self._trajectories
 
-    def _filter_trajectories_not_starting_and_ending_at_home(self, trajectories):
+    def _filter_trajectories_not_starting_and_ending_at_home(self,
+                                                             trajectories):
         res = []
         for trajectory in trajectories:
-            if (trajectory[0] == self.home_site.type.symbol) and (trajectory[-1] == self.home_site.type.symbol):
+            if (trajectory[0] == self.home_site.type.symbol) and (
+                    trajectory[-1] == self.home_site.type.symbol):
                 res.append(trajectory)
         return res
 
@@ -62,7 +69,8 @@ class ExpertPersonaAgent(ExpertAgent):
         for path in trajectory_matrix:
             states = []
             actions = []
-            mad_curr = np.zeros(len(self.env.mandatory_activity_set), dtype=bool)
+            mad_curr = np.zeros(len(self.env.mandatory_activity_set),
+                                dtype=bool)
             for t, step in enumerate(path):
                 state = self.env.G[t][step][str(mad_curr.astype(int))]['state']
                 if step in self.env.mandatory_activity_set:
@@ -73,7 +81,8 @@ class ExpertPersonaAgent(ExpertAgent):
                     if state in available_actions:
                         act_ix = self.env._action_rev_map[state.symbol]
                     else:
-                        act_ix = self.env._action_rev_map[self.env.travel_mode_labels[0]]
+                        act_ix = self.env._action_rev_map[
+                            self.env.travel_mode_labels[0]]
                     actions.append(act_ix)
                 states.append(state.state_id)
             trajectories.append(np.array(zip(states, actions)))

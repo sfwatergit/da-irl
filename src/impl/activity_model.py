@@ -76,7 +76,7 @@ class PersonModel(object):
         Args:
             activity_models (dict[str,ActivityModel]): Map of activity
             symbols to corresponding ActivityModels.
-            travel_models (dict[str,ActivityModel]): Map of travel mode
+            travel_models (dict[str,TravelModel]): Map of travel mode
             symbols to corresponding TravelModels.
         """
         self.travel_models = travel_models

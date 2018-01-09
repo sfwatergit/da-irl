@@ -4,22 +4,22 @@ from abc import abstractproperty, ABCMeta
 import six
 
 from src.algos.maxent_irl import MaxEntIRL
-from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.misc import logger
 
 
 class ExpertAgent(six.with_metaclass(ABCMeta)):
-    def __init__(self, config, env, learning_algorithm):
+    def __init__(self, person_model, env, learning_algorithm):
         """PersonaAgent representation.
 
         Args:
-            config (ATPConfig): parameters specifications for this expert agent.
+            person_model (PersonModel): parameters specifications for this
+            expert agent.
             env (ActivityEnv):
             learning_algorithm (MaxEntIRL):
         """
         self.env = env
-        self._config = config
+        self._person_model = person_model
         self._learning_algorithm = learning_algorithm
 
     @abstractproperty

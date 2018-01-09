@@ -38,6 +38,72 @@ from src.impl.activity_model import PersonModel
 from src.util.math_utils import to_onehot
 
 
+class MandatoryActivityMixin(object):
+    def __init__(self, person_model):
+        self.person_model = person_model
+        self.mandatory_activity_set = person_model.mandatory_activity_set
+        self.mandatory_activity_map = OrderedDict(
+            (v, to_onehot(k, len(self.mandatory_activity_set)))
+            for k, v in enumerate(self.mandatory_activity_set))
+
+    def _get_mandatory_activities_done(self, current_time_index):
+        """Compute the possible mandatory activities that have already been
+        completed at the __start__ of this timeslice (i.e., prior to the
+        current time index).
+
+        The result is a one-hot vector keyed to the set of
+        mandatory activities (sorted lexicographically).
+
+        Conditional logic respects the following boundary conditions:
+            1. Agent cannot start off with any mandatory activities completed.
+            2. It is impossible for an agent to have completed any mandatory
+            activities by the time they've reached the second timeslice
+            (travel would've been required).
+
+        Args:
+            current_time_index (int): The current timeslice index.
+
+        Yields:
+            nd.array[str]: A one-hot vector of mandatory activities completed
+                          (or an array of all zeros if none have been
+                          completed).
+        """
+        if current_time_index < 2:
+            yield np.zeros(len(self.mandatory_activity_set), dtype=int)
+        else:
+            num_possible_ma = min(current_time_index,
+                                  len(self.mandatory_activity_set))
+            for i in range(num_possible_ma, -1, -1):
+                possible_mad = combinations(self.mandatory_activity_set, i)
+                if i == 0:
+                    yield np.zeros(len(self.mandatory_activity_set), dtype=int)
+                else:
+                    for ma in possible_mad:
+                        yield np.array(sum([self.mandatory_activity_map[a] for a
+                                            in ma]))
+
+    def _maybe_increment_mad(self, current_mad, next_activity_symbol):
+        """Utility function to compute the possible next set of completed
+        mandatory activities given a reachable next state symbol.
+
+        Args:
+            current_mad (nd.array[int]): One-hot vector of the current
+                                        completed maintenance activities.
+            next_activity_symbol (str): Symbol indicative of the next
+                                        activity or travel state for which to
+                                        compute the next completed
+                                        maintenance activities.
+
+        Returns:
+            (nd.array[int]): One-hot vector of the projected completed
+                             maintenance activities.
+
+        """
+        return current_mad.astype(int) + (
+                self.mandatory_activity_map[next_activity_symbol].astype(
+                    bool) & ~current_mad).astype(int)
+
+
 class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
     # TODO: Pull abstract methods out of the initial implementation and into
     #       this class.
@@ -82,7 +148,7 @@ class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
         raise NotImplementedError
 
 
-class StateBuilder(AbstractStateBuilder):
+class StateBuilder(AbstractStateBuilder, MandatoryActivityMixin):
     def __init__(self, agent_id, horizon, person_model):
         # type: (str, int, PersonModel) -> None
         """Builds the state dynamics in an ``Env`` for an individual
@@ -126,10 +192,6 @@ class StateBuilder(AbstractStateBuilder):
 
         self.work_activity_symbol = person_model.work_activity.symbol
         self.home_activity_symbol = person_model.home_activity.symbol
-        self.mandatory_activity_set = person_model.mandatory_activity_set
-        self.mandatory_activity_map = OrderedDict(
-            (v, to_onehot(k, len(self.mandatory_activity_set)))
-            for k, v in enumerate(self.mandatory_activity_set))
         self.activity_symbols = person_model.activity_models.keys()
         self.travel_mode_symbols = person_model.travel_models.keys()
         self.all_symbols = self.activity_symbols + self.travel_mode_symbols
@@ -172,7 +234,7 @@ class StateBuilder(AbstractStateBuilder):
 
         Args:
             current_symbol (str): the current state type of the agent.
-            current_time_index (str): start_time of activity
+            current_time_index (int): start_time of activity
                                   or travel segment represented by symbol
                                   used mainly to double check constraints on
                                   activity start/end times.
@@ -195,42 +257,6 @@ class StateBuilder(AbstractStateBuilder):
                 raise ValueError("%s not Found!" % current_symbol)
             return res
 
-    def _get_mandatory_activities_done(self, current_time_index):
-        """Compute the possible mandatory activities that have already been
-        completed at the __start__ of this timeslice (i.e., prior to the
-        current time index).
-
-        The result is a one-hot vector keyed to the set of
-        mandatory activities (sorted lexicographically).
-
-        Conditional logic respects the following boundary conditions:
-            1. Agent cannot start off with any mandatory activities completed.
-            2. It is impossible for an agent to have completed any mandatory
-            activities by the time they've reached the second timeslice
-            (travel would've been required).
-
-        Args:
-            current_time_index (int): The current timeslice index.
-
-        Yields:
-            nd.array[str]: A one-hot vector of mandatory activities completed
-                          (or an array of all zeros if none have been
-                          completed).
-        """
-        if current_time_index < 2:
-            yield np.zeros(len(self.mandatory_activity_set), dtype=int)
-        else:
-            num_possible_ma = min(current_time_index,
-                                  len(self.mandatory_activity_set))
-            for i in range(num_possible_ma, -1, -1):
-                possible_mad = combinations(self.mandatory_activity_set, i)
-                if i == 0:
-                    yield np.zeros(len(self.mandatory_activity_set), dtype=int)
-                else:
-                    for ma in possible_mad:
-                        yield np.array(sum([self.mandatory_activity_map[a] for a
-                                            in ma]))
-
     def _get_states(self, time_index):
         """Generate the components of the reachable states at the current time
         index.
@@ -239,9 +265,8 @@ class StateBuilder(AbstractStateBuilder):
             time_index (int): The current time index.
         """
         for symbol in self._get_possible_symbols(time_index):
-            for mad in self._get_mandatory_activities_done(time_index):
-                yield symbol, mad, self._get_next_reachable_symbols(symbol,
-                                                                    time_index)
+            yield symbol, self._get_next_reachable_symbols(symbol,
+                                                           time_index)
 
     def run(self, env):
         """Returns a generator that populates an environments' states and
@@ -255,16 +280,21 @@ class StateBuilder(AbstractStateBuilder):
         # Step backward through time from horizon to 0
         for time_index in range(self.horizon, -1, -1):
             env.g[time_index] = {}
-            for symbol, mad, next_symbols in self._get_states(time_index):
-                # check prevents overwriting dict at env.g[time_index][symbol]
-                if symbol not in env.g[time_index]:
-                    env.g[time_index][symbol] = {}
-                State = ActivityState if symbol in self.activity_symbols else \
-                    TravelState
-                state = State(state_id, symbol, time_index, mad, next_symbols)
-                env.g[time_index][symbol][str(mad)] = state
-                env.states[state_id] = state
-                state_id += 1
+            for symbol, next_symbols in self._get_states(time_index):
+
+                for mad in self._get_mandatory_activities_done(time_index):
+                    # check prevents overwriting dict at
+                    # env.g[time_index][symbol]
+                    if symbol not in env.g[time_index]:
+                        env.g[time_index][symbol] = {}
+                    State = ActivityState if symbol in self.activity_symbols \
+                        else \
+                        TravelState
+                    state = State(state_id, symbol, time_index, mad,
+                                  next_symbols)
+                    env.g[time_index][symbol][str(mad)] = state
+                    env.states[state_id] = state
+                    state_id += 1
         # Additional initialization of environment properties
 
 
@@ -284,12 +314,9 @@ class AbstractTransitionBuilder(six.with_metaclass(ABCMeta)):
         """
         self.horizon = horizon
         self.mandatory_activity_set = person_model.mandatory_activity_set
-        self.ma_dict = OrderedDict(
-            (v, to_onehot(k, len(self.mandatory_activity_set))) for k, v in
-            enumerate(self.mandatory_activity_set))
 
 
-class TransitionBuilder(AbstractTransitionBuilder):
+class TransitionBuilder(AbstractTransitionBuilder, MandatoryActivityMixin):
     def __init__(self, person_model, horizon):
         """An initial implementation of the ``AbstractTransitionBuilder``
         """
@@ -320,34 +347,12 @@ class TransitionBuilder(AbstractTransitionBuilder):
                 next_mad = current_mad.astype(int)
             yield next_time_index, next_activity_symbol, next_mad
 
-    def _maybe_increment_mad(self, current_mad, next_activity_symbol):
-        """Utility function to compute the possible next set of completed
-        mandatory activities given a reachable next state symbol.
-
-        Args:
-            current_mad (nd.array[int]): One-hot vector of the current
-                                        completed maintenance activities.
-            next_activity_symbol (str): Symbol indicative of the next
-                                        activity or travel state for which to
-                                        compute the next completed
-                                        maintenance activities.
-
-        Returns:
-            (nd.array[int]): One-hot vector of the projected completed
-                             maintenance activities.
-
-        """
-        return current_mad.astype(int) + (
-                self.ma_dict[next_activity_symbol].astype(
-                    bool) & ~current_mad).astype(int)
-
 
 class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
     # XXXX: There should really only be one env builder with StateBuilder
     # and TransitionBuilder provided as mixins or declarative metaclasses.
     def __init__(self, config):
-        """
-        Base class for environment dynamics builder.
+        """Base class for environment dynamics builder.
 
         Args:
             config (ATPConfig): General configuration parameters for
