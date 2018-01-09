@@ -31,16 +31,11 @@ from itertools import combinations
 import numpy as np
 import six
 
-from src import ATPConfig
+from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction
 from src.impl.activity_model import PersonModel
 from src.util.math_utils import to_onehot
-
-
-
-
-
 
 
 class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
