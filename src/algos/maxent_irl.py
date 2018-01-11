@@ -56,7 +56,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
         self._policy = policy
         self._reward = self.mdp.reward_function
-        self._dim_feature_space = mdp.reward_function.dim_ss
+        self._dim_feature_space = mdp.reward_function.dim_phi
         self._total_num_paths = None
         self._max_path_length = 0
 

@@ -99,14 +99,14 @@ class ATPTransition(TransitionFunction):
             if len(next_state) > 0:
                 return np.array([(1.0, next_state[0])])
             else:
-                return np.array([(1.0, self.env.home_goal_states[0])])
+                return np.array([(1.0, self._env.home_goal_states[0])])
 
 
 class ActivityMDP(MDP):
     def __init__(self, reward_function, gamma, env):
         transitions = ATPTransition(env)
         super(ActivityMDP, self).__init__(reward_function, transitions, env.G,
-                                          gamma, env)
+                                          gamma)
         self._env = env
         env.transition_matrix = self.transition_matrix
         env.reward_function = self.reward_function

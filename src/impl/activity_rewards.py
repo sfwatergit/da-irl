@@ -68,7 +68,7 @@ class ActivityRewardFunction(RewardFunction):
         self.h_dim = nn_params['h_dim']
         self.reg_dim = nn_params['reg_dim']
 
-        self.input_size = self.dim_ss
+        self.input_size = self.dim_phi
 
         self.input_ph = tf.placeholder(tf.float32,
                                        shape=[None, self.input_size],
@@ -147,19 +147,19 @@ class ActivityRewardFunction(RewardFunction):
                                        len(self.activity_features) +
                                        len(config.travel_params.keys()))
 
-    def phi(self, s, a):
-        phi = np.zeros((self._dim_ss, 1), float)
-        state = self._env.states[s]
-        feature_ixs = range(self._dim_ss)
-        action = self._env.actions[a]
+    def phi(self, state_id, action_id):
+        phi = np.zeros((self._dim_phi, 1), float)
+        state_id = self._env.states[state_id]
+        feature_ixs = range(self._dim_phi)
+        action_id = self._env.actions[action_id]
         for ix in feature_ixs:
-            phi[ix] = self.features[ix](state, action)
+            phi[ix] = self.features[ix](state_id, action_id)
         return phi
 
     def apply_grads(self, grad_r):
         feat_map = self.feature_matrix
         grad_r = np.reshape(grad_r, [-1, 1])
-        feat_map = np.reshape(feat_map, [-1, self.dim_ss])
+        feat_map = np.reshape(feat_map, [-1, self.dim_phi])
         _, grad_theta, l2_loss, grad_norms = self.sess.run(
             [self.optimize, self.grad_theta, self.l2_loss, self.grad_norms],
             feed_dict={self.grad_r: grad_r, self.input_ph: feat_map})
@@ -173,7 +173,7 @@ class ActivityRewardFunction(RewardFunction):
 
     def get_rewards(self):
         feed_dict = {
-            self.input_ph: self.feature_matrix.reshape([-1, self.dim_ss])}
+            self.input_ph: self.feature_matrix.reshape([-1, self.dim_phi])}
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self._env.nS, self._env.nA])
 

@@ -406,9 +406,9 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
             properties available for use by algorithmic framework.
         """
         self._initialize_env()
+
         # Build states for each individual in the household
         # (independently of each other):
-
         states, state_graph = {}, {}
 
         for agent_id, person_model in \
