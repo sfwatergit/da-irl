@@ -12,7 +12,10 @@ from src.util.math_utils import to_onehot
 
 class ActivityEnv(gym.Env):
     def __init__(self):
-        """Environment within which activity-travel planning agent interact.
+        """Activity-Travel environment representing the planning domain with
+        which activity-travel planning agent interact.
+
+        Agents observe
 
         It is expected that the environment is initialized per a configurable
         ``EnvBuilder``. All non-derivative properties are defined per the

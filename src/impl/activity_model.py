@@ -1,7 +1,10 @@
 from abc import ABCMeta
+from collections import OrderedDict
 
 import six
 
+from src.impl.activity_mdp import ActivityMDP
+from src.util.math_utils import to_onehot
 from src.util.misc_utils import bag_by_type
 
 
@@ -66,7 +69,7 @@ class TravelModel(TourElementModel):
 
 
 class PersonModel(object):
-    def __init__(self, activity_models, travel_models):
+    def __init__(self, agent_id, activity_models, travel_models):
         """Contains the information on a single person's schedule/plan.
 
         To be used for the daily activity-travel utility model transition
@@ -75,10 +78,13 @@ class PersonModel(object):
 
         Args:
             activity_models (dict[str,ActivityModel]): Map of activity
-            symbols to corresponding ActivityModels.
+                                                    symbols to corresponding
+                                                    ActivityModels.
             travel_models (dict[str,TravelModel]): Map of travel mode
-            symbols to corresponding TravelModels.
+                                                    symbols to corresponding
+                                                    TravelModels.
         """
+        self.agent_id = agent_id
         self.travel_models = travel_models
         self.activity_models = activity_models
 
@@ -86,6 +92,10 @@ class PersonModel(object):
             [activity_model.symbol for activity_model in
              activity_models.values()
              if activity_model.is_mandatory])
+        self.mandatory_activity_map = OrderedDict(
+            (v, to_onehot(k, len(self.mandatory_activity_set)))
+            for k, v in enumerate(self.mandatory_activity_set))
+
         self.joint_activity_set = set(
             [activity_model.symbol for activity_model in
              activity_models.values()
@@ -97,6 +107,7 @@ class PersonModel(object):
         self.home_activity = self.activity_groups['home'][0]
         self.work_activity = self.activity_groups['work'][0]
         self.other_activity = self.activity_groups['other'][0]
+        # self.mdp = ActivityMDP()
 
 
 class HouseholdModel(object):

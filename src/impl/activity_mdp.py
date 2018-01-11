@@ -10,7 +10,7 @@ class ATPState(State):
         self.symbol = symbol
         self._mad = mad  # mad == mandatory/mandatory activities done
         self.time_index = time_index
-        self.next_states = []
+        self.next_states = {}
         self.reachable_symbols = reachable_symbols
 
     @property
@@ -73,6 +73,7 @@ class ActivityState(ATPState):
     Denotes the current activity at the current time slice, inclusive of all
     other components of the activity state.
     """
+
     def __init__(self, state_id, activity_type, time_index, mad,
                  reachable_symbols):
         super(ActivityState, self).__init__(state_id, activity_type, time_index,
@@ -84,13 +85,13 @@ class ATPTransition(TransitionFunction):
         TransitionFunction.__init__(self, env)
 
     def __call__(self, state, action, **kwargs):
-        if state.state_id in self.env.terminals:
-            goal_state = [s for s in self.env.home_goal_states if
+        if state.state_id in self._env.terminals:
+            goal_state = [s for s in self._env.home_goal_states if
                           np.all(s.mad == state.mad)][0]
             return np.array([(1.0, goal_state)])
         else:
-            if action.succ_ix in self.env.mandatory_activity_set:
-                mad = self.env._maybe_increment_mad(state.mad, action.succ_ix)
+            if action.succ_ix in self._env.mandatory_activity_set:
+                mad = self._env._maybe_increment_mad(state.mad, action.succ_ix)
             else:
                 mad = state.mad
             next_state = [s for s in state.available_actions if
@@ -103,8 +104,9 @@ class ATPTransition(TransitionFunction):
 
 class ActivityMDP(MDP):
     def __init__(self, reward_function, gamma, env):
-        T = ATPTransition(env)
-        super(ActivityMDP, self).__init__(reward_function, T, env.G, gamma, env)
+        transitions = ATPTransition(env)
+        super(ActivityMDP, self).__init__(reward_function, transitions, env.G,
+                                          gamma, env)
         self._env = env
         env.transition_matrix = self.transition_matrix
         env.reward_function = self.reward_function

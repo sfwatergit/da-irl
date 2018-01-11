@@ -6,7 +6,6 @@ import numpy as np
 import tensorflow as tf
 
 from src.core.mdp import RewardFunction
-from src.impl.activity_env import ActivityEnv
 from src.impl.activity_features import ActivityFeature, \
     create_act_at_x_features, TripFeature
 from src.util.math_utils import get_subclass_list, cartesian, \
@@ -30,24 +29,33 @@ class ActivityRewardFunction(RewardFunction):
     Initialized with config-defined scoring parameters.
     """
 
-    def __init__(self, env, name="reward", rmax=1.0, opt_params=None,
+    def __init__(self, config, person_model, agent_id, name="reward", rmax=1.0,
+                 opt_params=None,
                  nn_params=None, initial_theta=None):
-        # type: (ActivityEnv) -> None
-        params = env.config
-        self.activity_features = self.make_activity_features(env, params)
-        self.trip_features = self.make_trip_features(env, params)
-        self._make_indices(params)
-        super(ActivityRewardFunction, self).__init__(
-            self.activity_features + self.trip_features, env, rmax,
-            initial_weights=initial_theta)
+        """
 
+        Args:
+            config (ATPConfig): System configuration parameters.
+            name (str): Name to assign to reward function (used for
+                        tensorflow scoping)
+            rmax (float): Maximum value of the reward (not currently used)
+            opt_params (dict[str,obj]):
+            nn_params (dict[str,obj]):
+            initial_theta (nd.array):
+        """
+        self.activity_features = self.make_activity_features(config,
+                                                             person_model)
+        self.trip_features = self.make_trip_features(config)
+        self._make_indices(config)
+        super(ActivityRewardFunction, self).__init__(
+            self.activity_features + self.trip_features, rmax,
+            initial_weights=initial_theta)
+        name = "{}_{}".format(name, agent_id)
         with tf.variable_scope(name):
-            self._init(env, opt_params, nn_params, rmax, initial_theta)
+            self._init(opt_params, nn_params, initial_theta)
             self.scope = tf.get_variable_scope().name
 
-    def _init(self, env, opt_params, nn_params, rmax, initial_theta):
-        params = env.config
-
+    def _init(self, opt_params, nn_params, initial_theta):
         if nn_params is None:
             nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
 
@@ -95,33 +103,49 @@ class ActivityRewardFunction(RewardFunction):
         self.sess.run(tf.global_variables_initializer())
 
     @staticmethod
-    def make_trip_features(env, params):
-        return [i(mode, params, env=env) for i in get_subclass_list(TripFeature)
-                for mode in
-                params.travel_params.keys()]
+    def make_trip_features(person_model):
+        return [i(mode, travel_model) for i in get_subclass_list(
+            TripFeature) for mode, travel_model in
+                person_model.travel_models.items()]
 
     @staticmethod
-    def make_activity_features(env, params):
-        activity_features = [i(params, env=env) for i in
-                             get_subclass_list(ActivityFeature)]
-        acts = [env.home_activity, env.work_activity, env.other_activity]
-        time_range = np.arange(0, env.horizon * env.segment_minutes,
-                               env.segment_minutes)
+    def make_activity_features(config, person_model):
+        """
+
+        Args:
+            config (src.impl.ATPConfig):
+            person_model (PersonModel):
+        """
+        activity_features = [i(activity_symbol, activity_model) for i in
+                             get_subclass_list(ActivityFeature) for
+                             activity_symbol, activity_model in
+                             person_model.activity_models.items()]
+
+        acts = [person_model.home_activity, person_model.work_activity,
+                person_model.other_activity]
+
+        time_range = np.arange(0, config.irl_params.horizon *
+                               config.profile_params.segment_minutes,
+                               config.profile_params.segment_minutes)
+
         prod = cartesian([acts, time_range])
+
         act_at_x_features = [
-            create_act_at_x_features(where, when, env.segment_minutes, params)(
-                env=env)
+            create_act_at_x_features(where, when,
+                                     config.irl_params.segment_minutes,
+                                     config)()
             for where, when in prod]
+
         activity_features += act_at_x_features
         return activity_features
 
-    def _make_indices(self, params):
+    def _make_indices(self, config):
         assert (len(self.activity_features) > 0) and (
                 len(self.trip_features) > 0)
         self._activity_feature_ixs = range(len(self.activity_features))
         self._trip_feature_ixs = range(len(self.activity_features),
                                        len(self.activity_features) +
-                                       len(params.travel_params.keys()))
+                                       len(config.travel_params.keys()))
 
     def phi(self, s, a):
         phi = np.zeros((self._dim_ss, 1), float)

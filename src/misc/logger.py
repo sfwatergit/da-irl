@@ -270,7 +270,7 @@ def log_parameters_lite(log_file, args):
         for k, v in method_args.items():
             log_params["json_args"][k] = stub_to_json(v)
         kwargs = stub_method.obj.kwargs
-        for k in ["baselines", "env", "policy"]:
+        for k in ["baselines", "_env", "policy"]:
             if k in kwargs:
                 log_params["json_args"][k] = stub_to_json(kwargs.pop(k))
         log_params["json_args"]["algos"] = stub_to_json(stub_method.obj)

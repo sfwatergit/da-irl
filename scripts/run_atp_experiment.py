@@ -62,7 +62,7 @@ def run(config, log_dir):
                                inter_op_parallelism_threads=ncpu)
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
-    activity_env = ActivityEnv(config)
+    activity_env = ActivityEnv()
 
     trace_files = get_trace_fnames(config.traces_dir)
 
@@ -96,12 +96,12 @@ def run(config, log_dir):
         np.array([expert_data[0]['theta'], expert_data[1]['theta']]),
         0).reshape(-1, 1)
 
-    # mdp = ActivityMDP(ActivityLinearRewardFunction(activity_env,
+    # _env = ActivityMDP(ActivityLinearRewardFunction(activity_env,
     # initial_theta=init_theta), 0.99, activity_env)
     #
-    # model = ATPActorMimicIRL(mdp, expert_data)
+    # model = ATPActorMimicIRL(_env, expert_data)
     #
-    # dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(mdp))
+    # dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(_env))
     #
     # for i in range(30):
     #     model.train_amn()

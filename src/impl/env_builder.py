@@ -25,7 +25,6 @@ components can be extended and/or switched out.
 import json
 import sys
 from abc import ABCMeta, abstractmethod
-from collections import OrderedDict
 from itertools import combinations
 
 import numpy as np
@@ -35,18 +34,11 @@ from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction
 from src.impl.activity_model import PersonModel
-from src.util.math_utils import to_onehot
 
 
 class MandatoryActivityMixin(object):
-    def __init__(self, person_model):
-        self.person_model = person_model
-        self.mandatory_activity_set = person_model.mandatory_activity_set
-        self.mandatory_activity_map = OrderedDict(
-            (v, to_onehot(k, len(self.mandatory_activity_set)))
-            for k, v in enumerate(self.mandatory_activity_set))
 
-    def _get_mandatory_activities_done(self, current_time_index):
+    def _get_mandatory_activities_done(self, person_model, current_time_index):
         """Compute the possible mandatory activities that have already been
         completed at the __start__ of this timeslice (i.e., prior to the
         current time index).
@@ -69,20 +61,24 @@ class MandatoryActivityMixin(object):
                           completed).
         """
         if current_time_index < 2:
-            yield np.zeros(len(self.mandatory_activity_set), dtype=int)
+            yield np.zeros(len(person_model.mandatory_activity_set), dtype=int)
         else:
             num_possible_ma = min(current_time_index,
-                                  len(self.mandatory_activity_set))
+                                  len(person_model.mandatory_activity_set))
             for i in range(num_possible_ma, -1, -1):
-                possible_mad = combinations(self.mandatory_activity_set, i)
+                possible_mad = combinations(person_model.mandatory_activity_set,
+                                            i)
                 if i == 0:
-                    yield np.zeros(len(self.mandatory_activity_set), dtype=int)
+                    yield np.zeros(len(person_model.mandatory_activity_set),
+                                   dtype=int)
                 else:
                     for ma in possible_mad:
-                        yield np.array(sum([self.mandatory_activity_map[a] for a
-                                            in ma]))
+                        yield np.array(sum([
+                            person_model.mandatory_activity_map[a] for a
+                            in ma]))
 
-    def _maybe_increment_mad(self, current_mad, next_activity_symbol):
+    def _maybe_increment_mad(self, person_model, current_mad,
+                             next_activity_symbol):
         """Utility function to compute the possible next set of completed
         mandatory activities given a reachable next state symbol.
 
@@ -100,7 +96,8 @@ class MandatoryActivityMixin(object):
 
         """
         return current_mad.astype(int) + (
-                self.mandatory_activity_map[next_activity_symbol].astype(
+                person_model.mandatory_activity_map[
+                    next_activity_symbol].astype(
                     bool) & ~current_mad).astype(int)
 
 
@@ -108,9 +105,6 @@ class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
     # TODO: Pull abstract methods out of the initial implementation and into
     #       this class.
 
-    # TODO: Implement the modules as mixins (multiple inheritance). This would
-    #       allow for something like mandatory activities to be plugged in
-    #       and out  of the state generator (run method).
     def __init__(self, agent_id, horizon, person_model):
         """A modular ``StateBuilder`` class for the ``ActivityEnv`` designed
         to allow different potential dynamics to define the ``Env``'s
@@ -137,13 +131,13 @@ class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
         raise NotImplementedError
 
     @abstractmethod
-    def run(self, env):
+    def run(self, states, state_graph):
         """Returns a generator that populates an environments' states and
         state graph.
 
-        Args:
-            env (ActivityEnv): An ``ActivityEnv``, which may have an empty or
-                               partially filled state graph.
+       Args:
+           states (dict[int,ActivityState]): A map of state_id to ActivityState.
+           state_graph (dict): An empty or partially filled state graph.
         """
         raise NotImplementedError
 
@@ -268,38 +262,37 @@ class StateBuilder(AbstractStateBuilder, MandatoryActivityMixin):
             yield symbol, self._get_next_reachable_symbols(symbol,
                                                            time_index)
 
-    def run(self, env):
+    def run(self, states, state_graph):
         """Returns a generator that populates an environments' states and
         state graph.
 
        Args:
-           env (ActivityEnv): An ``ActivityEnv``, which may have an
-           empty or partially filled state graph.
+           states (dict[int,ActivityState]): A map of state_id to ActivityState.
+           state_graph (dict): An empty or partially filled state graph.
         """
-        state_id = 0 if len(env.states) == 0 else env.states.keys()[-1]
+        state_id = 0 if len(states) == 0 else states.keys()[-1]
         # Step backward through time from horizon to 0
         for time_index in range(self.horizon, -1, -1):
-            env.g[time_index] = {}
+            state_graph[time_index] = {}
             for symbol, next_symbols in self._get_states(time_index):
-
-                for mad in self._get_mandatory_activities_done(time_index):
+                for mad in self._get_mandatory_activities_done(
+                        self.person_model, time_index):
                     # check prevents overwriting dict at
-                    # env.g[time_index][symbol]
-                    if symbol not in env.g[time_index]:
-                        env.g[time_index][symbol] = {}
+                    # state_graph.g[time_index][symbol]
+                    if symbol not in state_graph[time_index]:
+                        state_graph[time_index][symbol] = {}
                     State = ActivityState if symbol in self.activity_symbols \
                         else \
                         TravelState
                     state = State(state_id, symbol, time_index, mad,
                                   next_symbols)
-                    env.g[time_index][symbol][str(mad)] = state
-                    env.states[state_id] = state
+                    state_graph[time_index][symbol][str(mad)] = state
+                    states[state_id] = state
                     state_id += 1
-        # Additional initialization of environment properties
 
 
 class AbstractTransitionBuilder(six.with_metaclass(ABCMeta)):
-    def __init__(self, person_model, horizon):
+    def __init__(self, household_model, horizon):
         """A modular transition builder object that is designed to create a
         generator for transitions from states in an ``ActivityEnv``.
 
@@ -309,20 +302,21 @@ class AbstractTransitionBuilder(six.with_metaclass(ABCMeta)):
                            day starts at index 0 and continues through index
                            ``horizon`` - 1 (corresponding to day time
                            24:00 - discretization interval length (in minutes).
-            person_model (PersonModel): A `PersonModel` representing one
+            household_model (HouseholdModel): A `PersonModel` representing one
                           `ExpertPersona`.
         """
         self.horizon = horizon
-        self.mandatory_activity_set = person_model.mandatory_activity_set
+        self.household_model = household_model
 
 
 class TransitionBuilder(AbstractTransitionBuilder, MandatoryActivityMixin):
     def __init__(self, person_model, horizon):
         """An initial implementation of the ``AbstractTransitionBuilder``
         """
-        super(TransitionBuilder, self).__init__(person_model, horizon)
+        super(TransitionBuilder, self).__init__(
+            person_model, horizon)
 
-    def get_transitions(self, state):
+    def get_transitions(self, state, person_model):
         """Compute the reachable next states characterizing the transition
         kernel.
 
@@ -340,8 +334,9 @@ class TransitionBuilder(AbstractTransitionBuilder, MandatoryActivityMixin):
                 next_time_index = self.horizon
             else:
                 raise ValueError
-            if next_activity_symbol in self.mandatory_activity_set:
-                next_mad = self._maybe_increment_mad(current_mad,
+            if next_activity_symbol in \
+                    person_model.mandatory_activity_set:
+                next_mad = self._maybe_increment_mad(person_model, current_mad,
                                                      next_activity_symbol)
             else:
                 next_mad = current_mad.astype(int)
@@ -349,8 +344,6 @@ class TransitionBuilder(AbstractTransitionBuilder, MandatoryActivityMixin):
 
 
 class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
-    # XXXX: There should really only be one env builder with StateBuilder
-    # and TransitionBuilder provided as mixins or declarative metaclasses.
     def __init__(self, config):
         """Base class for environment dynamics builder.
 
@@ -361,12 +354,28 @@ class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
         self.config = config
 
     @abstractmethod
+    def _initialize_env(self):
+        """Hook to run any initialization of the environment.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def run(self):
-        """Runs the ``StateBuilder`` and the ``ActivityBuilder``.
+        """Runs the ``StateBuilder`` and the ``TransitionBuilder``.
 
         Returns:
             (ActivityEnv): The ``Env`` with the dynamics fully built.
         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _finalize_env(self):
+        """Hook to run any finalization of the environment.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _build_actions(self):
         raise NotImplementedError
 
 
@@ -382,6 +391,11 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
         """
         super(HouseholdEnvBuilder, self).__init__(atp_config)
         self.household_model = atp_config.household_params.household_model
+        self.env = None
+
+    def _initialize_env(self):
+        # Instantiate an empty environment:
+        self.env = ActivityEnv()
 
     def run(self):
         """Main method for running all components of the ``EnvBuilder``
@@ -391,69 +405,71 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
             (ActivityEnv): Fully initialized environment with all relevant
             properties available for use by algorithmic framework.
         """
-        # Instantiate an empty environment:
-        env = ActivityEnv()
-
+        self._initialize_env()
         # Build states for each individual in the household
         # (independently of each other):
+
+        states, state_graph = {}, {}
+
         for agent_id, person_model in \
                 self.household_model.household_member_models.items():
             state_builder = StateBuilder(agent_id, config.irl_params.horizon,
                                          person_model)
-            state_builder.run(env)
+            state_builder.run(states, state_graph)
+
+        transition_builder = TransitionBuilder(self.household_model,
+                                               config.irl_params.horizon)
 
         # Transitions governed by already built state graph nodes
-        for agent_id, person_model in \
-                self.household_model.household_member_models.items():
-            # FIXME: It would be preferable not to need to have a separate
-            #        TransitionBuilder for each PersonModel
-            transition_builder = TransitionBuilder(person_model,
-                                                   config.irl_params.horizon)
-
-            for state in env.states.values():
+        for person_model in \
+                self.household_model.household_member_models.values():
+            for state in self.env.states.values():
                 for next_time_index, next_activity, next_mad in \
-                        transition_builder.get_transitions(state):
-                    state.next_states.append(
-                        env.g[next_time_index][next_activity][str(next_mad)])
+                        transition_builder.get_transitions(state, person_model):
+                    # key transitions by actions
+                    state.next_states[next_activity] = self.env.g[
+                        next_time_index][next_activity][str(
+                        next_mad)]
 
-        # Initialize other properties of environment here.
-        self._finialize_env_init(env)
-        return env
+        # Finalize properties of environment here.
+        self.env.states = states
+        self.env.g = state_graph
+        self._finalize_env()
+        return self.env
 
-    def _finialize_env_init(self, env):
+    def _finalize_env(self):
         """A few additional tasks to complete for the sake of convenience.
 
         This method assumes that the state graph has already been built.
 
-        Args:
-            env (ActivityEnv): The environment to finalize.
         """
+
         # initialize actions:
-        self._build_actions(env)
+        self._build_actions()
         # initialize environment action_space and state_space
-        env.nA = len(env.actions)
-        env.nS = len(env.states)
+        self.env.nA = len(self.env.actions)
+        self.env.nS = len(self.env.states)
         # set some other useful properties
-        env.horizon = self.config.irl_params.horizon
+        self.env.horizon = self.config.irl_params.horizon
         # TODO: Either create profile builder config for household and/or ensure
         # profile builder params are identical b/w agents.
-        env.segment_minutes = int(
-            self.config.profile_params.SEQUENCES_RESOLUTION.strip('min'))
+        self.env.segment_minutes = self.config.profile_params.segment_minutes
         # XXXX: For now, just use first available symbol for
         # home_activity. Later, remember this must eventually be done for
         # potentially multiple agents.
-        env.home_activity = \
+        self.env.home_activity = \
             self.config.household_params.household_model.home_activity_symbols[
                 0]
-        env.home_start_state = env.g[0][env.home_activity].values()[0]
-        env.home_goal_states.extend(
-            env.g[env.horizon][env.home_activity].values())
+        self.env.home_start_state = self.env.g[0][
+            self.env.home_activity].values()[0]
+        self.env.home_goal_states.extend(
+            self.env.g[self.env.horizon][self.env.home_activity].values())
 
-    def _build_actions(self, env):
-        """Builds actions in the env (which serve as labels for transitions).
+    def _build_actions(self):
+        """Builds actions in the _env (which serve as labels for transitions).
 
         Args:
-            env (ActivityEnv): an activity-travel environment
+            _env (ActivityEnv): an activity-travel environment
         """
         unique_symbols = set()
         for person_model in \
@@ -462,11 +478,11 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
                         .values():
             unique_symbols |= (set(person_model.travel_models.keys()) |
                                set(person_model.activity_models.keys()))
-        env.actions = {}
+        self.env.actions = {}
         for action_ix, el in enumerate(unique_symbols):
-            env.actions[action_ix] = ATPAction(action_ix, el)
-        env._action_rev_map = dict(
-            (v.succ_ix, k) for k, v in env.actions.items())
+            self.env.actions[action_ix] = ATPAction(action_ix, el)
+        self.env._action_rev_map = dict(
+            (v.succ_ix, k) for k, v in self.env.actions.items())
 
 
 if __name__ == '__main__':

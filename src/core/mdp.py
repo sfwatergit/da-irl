@@ -19,7 +19,8 @@ from cytoolz import memoize
 
 
 class MDP(six.with_metaclass(ABCMeta)):
-    def __init__(self, reward_function, transition, graph, gamma, env, terminals=None):
+    def __init__(self, reward_function, transition, graph, gamma, env,
+                 terminals=None):
         self._G = graph
         self._reward_function = reward_function
         self._transition = transition
@@ -40,6 +41,11 @@ class MDP(six.with_metaclass(ABCMeta)):
     @abstractproperty
     def A(self):
         """ Set of actions in the MDP in an hashable container """
+        raise NotImplementedError('Abstract property')
+
+    @abstractproperty
+    def T(self):
+        """ Transition kernel"""
         raise NotImplementedError('Abstract property')
 
     @abstractmethod
@@ -65,9 +71,6 @@ class MDP(six.with_metaclass(ABCMeta)):
     @memoize
     def R(self, state, action):
         return self._reward_function(state, action)
-
-    def T(self, state, action):
-        return self._transition(state, action)
 
     @property
     def transition_matrix(self):
@@ -112,7 +115,7 @@ class TransitionFunction(six.with_metaclass(ABCMeta)):
     """
 
     def __init__(self, env=None):
-        self.env = env
+        self._env = env
 
     def __call__(self, state, action, **kwargs):
         """ Execute the transition function
@@ -209,9 +212,11 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
     @property
     def feature_matrix(self):
         if self._feature_matrix is None:
-            self._feature_matrix = np.zeros((self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
+            self._feature_matrix = np.zeros(
+                (self._env.nS, self._env.nA, self.dim_ss), dtype=np.float32)
             for state in list(self._env.states.values()):
-                actions = [self._env._action_rev_map[action.symbol] for action in state.available_actions]
+                actions = [self._env._action_rev_map[action.symbol] for action
+                           in state.available_actions]
                 s = state.state_id
                 for a in actions:
                     if s in self._env.terminals:
@@ -227,7 +232,8 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
             return np.zeros(self._dim_ss)
         else:
             action = self._env.actions[a]
-        return np.concatenate([feature(state, action) for feature in self._features])
+        return np.concatenate(
+            [feature(state, action) for feature in self._features])
 
 
 class FeatureExtractor(six.with_metaclass(ABCMeta)):
@@ -235,8 +241,8 @@ class FeatureExtractor(six.with_metaclass(ABCMeta)):
         self._size = size
         self.ident = ident
         self._T = None
-        if 'env' in kwargs:
-            self.env = kwargs.pop('env')
+        if '_env' in kwargs:
+            self.env = kwargs.pop('_env')
         else:
             self.env = None
 

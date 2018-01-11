@@ -68,6 +68,7 @@ class ProfileBuilderConfig(ConfigManager):
             builder configuration parameters from path).
         """
         super(ProfileBuilderConfig, self).__init__(json_file=json_file)
+        self.segment_minutes = int(self.SEQUENCES_RESOLUTION.strip('min'))
 
 
 class HouseholdConfig(ConfigManager):
@@ -85,7 +86,8 @@ class HouseholdConfig(ConfigManager):
         member_data = {}
         members = data.pop("members", None)
         for member in members:
-            member_data[member["agent_id"]] = PersonModel(
+            agent_id = member["agent_id"]
+            member_data[agent_id] = PersonModel(agent_id,
                 dict((act, ActivityModel(act, atp)) for act, atp in
                      member.pop('activity_params').items()),
                 dict((tm, TravelModel(tm, atp)) for tm, atp in
