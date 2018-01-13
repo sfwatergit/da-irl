@@ -20,7 +20,8 @@ INF = np.nan_to_num([1 * float("-inf")])
 
 class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
-    def __init__(self, mdp, avi_tol=1e-4, verbose=False, policy=None):
+    def __init__(self, mdp, discretized_horizon, avi_tol=1e-4, verbose=False,
+                 policy=None):
         """Base class for maximum entropy inverse reinforcement learning agents.
 
         Subsumes linear and deep reward function variants.
@@ -34,6 +35,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                    1–9.
 
         Args:
+            discretized_horizon (int): Used to limit number of iterations
             policy (nd.array): Policy prior. May be used to initialize
             forward algorithm.
             avi_tol (float): Convergence tolerance used to compute softmax
@@ -47,10 +49,11 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             default).
 
         """
+        self.discretized_horizon = discretized_horizon
         self.avi_tol = avi_tol
         self.mdp = mdp
-        self.nS = len(self.mdp.S)
-        self.nA = len(self.mdp.A)
+        self.dim_S = len(self.mdp.S)
+        self.dim_A = len(self.mdp.A)
         self.expert_demos = None
         self.VERBOSE = verbose
 
@@ -74,10 +77,10 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
            demonstrations.
 
         Returns:
-            (np.ndarray): N x dA x dS array of state and action visitation
+            (np.ndarray): N x dim_A x dim_S array of state and action visitation
             counts
            """
-        savf = np.zeros((self.nS, self.nA), dtype=np.float32)
+        savf = np.zeros((self.dim_S, self.dim_A), dtype=np.float32)
         for trajectory in self.expert_demos:
             for state, action in trajectory:
                 savf[state, action] += 1
@@ -87,16 +90,17 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
 
     def approximate_value_iteration(self):
         """Computes maximum entropy policy given current reward function and
-        horizon via softmax value iteration.
+        discretized_horizon via softmax value iteration.
 
         Returns:
-            policy (np.ndarray):  An S x A policy based on reward parameters.
+            policy (np.ndarray):  An dim_S x dim_A policy based on reward
+            parameters.
 
         """
 
         reward = self.reward.get_rewards()
 
-        Q = np.zeros([self.nS, self.nA], dtype=np.float32)
+        Q = np.zeros([self.dim_S, self.dim_A], dtype=np.float32)
         diff = float("inf")
 
         while diff > 1e-4:
@@ -114,26 +118,29 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         with which a state and action are visited.
 
         Returns:
-            (np.ndarray): S x 1 state visitation distribution
+            (np.ndarray): dim_S x 1 state visitation distribution
 
         """
         state_visitation = np.expand_dims(self._start_state_dist(), axis=1)
         sa_visit_t = np.zeros(
             (self.mdp.transition_matrix.shape[0],
-             self.mdp.transition_matrix.shape[1], self.mdp.env.horizon))
+             self.mdp.transition_matrix.shape[1], self.discretized_horizon))
 
-        for i in range(self.mdp.env.horizon):
+        for i in range(self.discretized_horizon):
             sa_visit = state_visitation * self.policy
             sa_visit_t[:, :, i] = sa_visit  # (discount**i) * sa_visit
             # sum-out (SA)S
-            new_state_visitation = np.einsum(u'ij,ijk->k', sa_visit,
-                                             self.mdp.transition_matrix)
+            new_state_visitation = np.einsum("ij,ijk->k", sa_visit,
+                                             self.mdp.transition_matrix,
+                                             optimize=False)
+
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-            #  Sum out over SA, but we need to normalize by horizon here.
+            #  Sum out over SA, but we need to normalize by
+            # discretized_horizon here.
             #  This is different from Ziebart's algorithm, but if we do not,
             #  we get a poor learning signal. This seems to be standard in
             #  implementations.
-        return np.sum(sa_visit_t, axis=2) / self.mdp.env.horizon
+        return np.sum(sa_visit_t, axis=2) / self.discretized_horizon
 
     def train(self, expert_demos, num_iters, policy_skip_iters=1):
         """Train the IRL algorithm using the provided demonstrations.
@@ -227,7 +234,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         path_states = np.array([path[0] for path in self.expert_demos])
         start_states = np.array([state[0] for state in path_states])
         start_state_count = np.bincount(start_states.astype(int),
-                                        minlength=self.nS)
+                                        minlength=self.dim_S)
         return start_state_count.astype(float) / len(start_states)
 
     def _log_likelihood(self):

@@ -26,7 +26,8 @@ class VecExpAgent(object):
 
 class CloudpickleWrapper(object):
     """
-    Uses cloudpickle to serialize contents (otherwise multiprocessing tries to use pickle)
+    Uses cloudpickle to serialize contents (otherwise multiprocessing tries
+    to use pickle)
     """
 
     def __init__(self, x):
@@ -70,15 +71,18 @@ class SubProcVecExpAgent(VecExpAgent):
         """
 
         Args:
-            expert_persona_fns (list): list of expert personas to interact with in parallel
+            expert_persona_fns (list): list of expert personas to interact
+            with in parallel
         """
         self.closed = False
         self.experts = expert_persona_fns
         nexps = len(expert_persona_fns)
         self._trajectories = None
         self.remotes, self.work_remotes = zip(*[Pipe() for _ in range(nexps)])
-        self.ps = [Process(target=worker, args=(work_remote, remote, CloudpickleWrapper(expert_persona_fn))) for
-                   (work_remote, remote, expert_persona_fn) in zip(self.work_remotes, self.remotes, expert_persona_fns)]
+        self.ps = [Process(target=worker, args=(
+        work_remote, remote, CloudpickleWrapper(expert_persona_fn))) for
+                   (work_remote, remote, expert_persona_fn) in
+                   zip(self.work_remotes, self.remotes, expert_persona_fns)]
         for p in self.ps:
             p.daemon = True
             p.start()

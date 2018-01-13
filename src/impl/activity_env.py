@@ -8,6 +8,7 @@ from gym.spaces import MultiDiscrete
 from gym.spaces.discrete import Discrete
 
 from src.util.math_utils import to_onehot
+from src.util.misc_utils import reverse_action_map
 
 
 class ActivityEnv(gym.Env):
@@ -24,24 +25,49 @@ class ActivityEnv(gym.Env):
         """
         super(ActivityEnv, self).__init__()
         self._horizon = None
-        self.segment_minutes = None
-        # self.home_activity = self.config.home_activity.symbol
+        self.interval_length = None
+        self.home_activity = None
         self.home_start_state = None
         self.home_goal_states = []
+        self.terminals = []
 
-        self.nA = None
-        self.nS = None
+        self.mdps = {}
+
+        self.dim_A = None
+        self.dim_S = None
 
         self.__action_space = None
-        self.actions = None
-        self.states = {}
-        self.terminals = []
+        self._actions = {}
+        self._reverse_action_map = None
+
+        self._states = {}
+
         self.g = {}
 
         self.__observation_space = None
 
         self._transition_matrix = None
         self._reward_function = None
+
+    @property
+    def states(self):
+        return self._states
+
+    def add_states(self, states):
+        self._states.update(states)
+
+    @property
+    def actions(self):
+        return self._actions
+
+    @property
+    def reverse_action_map(self):
+        if self._reverse_action_map is None:
+            self._reverse_action_map = reverse_action_map(self.actions)
+        return self._reverse_action_map
+
+    def add_actions(self, actions):
+        self._actions.update(actions)
 
     @property
     def horizon(self):
@@ -55,17 +81,20 @@ class ActivityEnv(gym.Env):
     def G(self):
         return self.g
 
+    def update_G(self, state_graph):
+        self.g.update(state_graph)
+
     @property
     def action_space(self):
         if self.__action_space is None:
-            self.__action_space = Discrete(self.nA)
+            self.__action_space = Discrete(self.dim_A)
         return self.__action_space
 
     @property
     def observation_space(self):
         if self.__observation_space is None:
-            self.__observation_space = MultiDiscrete([[0, self.nA], [0,
-                                                                    self.nS]])
+            self.__observation_space = MultiDiscrete([[0, self.dim_A], [0,
+                                                                        self.dim_S]])
         return self.__observation_space
 
     @property
@@ -119,20 +148,19 @@ class ActivityEnv(gym.Env):
     def _reward(self, state, action):
         """
         r: S,A -> \mathbb{R}
-        Returns:
+        Returns: reward for state and action
 
         """
-        return self.reward_function.get_rewards()[
-            state.state_id, action.action_id]
+        return self.reward_function(state.state_id, action.action_id)
 
     def state_to_obs(self, state):
         if isinstance(state, int):
-            return to_onehot(state, self.nS)
+            return to_onehot(state, self.dim_S)
         else:
-            return to_onehot(state.state_id, self.nS)
+            return to_onehot(state.state_id, self.dim_S)
 
     def get_home_action_id(self):
         assert self.actions is not None
         for id, act in self.actions.items():
-            if self.home_activity == act.succ_ix:
+            if self.home_activity == act.next_state_symbol:
                 return id

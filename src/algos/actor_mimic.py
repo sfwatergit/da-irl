@@ -21,13 +21,13 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
         self.experts = experts  # expert learning agents
 
         # input: [batch_size, obs], # out: [batch_size, dim_actions]
-        self.obs_ph = tf.placeholder(tf.float32, [None, self.nS],
+        self.obs_ph = tf.placeholder(tf.float32, [None, self.dim_S],
                                      name='obs_ph')  # observations placeholder
-        self.labels = tf.placeholder(tf.float32, [None, self.nA],
+        self.labels = tf.placeholder(tf.float32, [None, self.dim_A],
                                      name='labels')  # target (expert) actions
         self.lr = tf.placeholder(tf.float32, (), name='lr')
 
-        logits = fc_net(self.obs_ph, n_layers=1, dim_hidden=32, dim_out=self.nA,
+        logits = fc_net(self.obs_ph, n_layers=1, dim_hidden=32, dim_out=self.dim_A,
                         act=tf.nn.elu, out_act=None)  # AMN net
 
         # take softmax over logits for output layer
@@ -50,10 +50,10 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
         for expert in self.experts:
             pi_e = np.squeeze(expert['policy'], 0)
             # obs, acts, rews = self.sample_amn_policy(2)
-            # obs = obs.reshape(-1, self.nS)
+            # obs = obs.reshape(-1, self.dim_S)
             obs = np.array([self.env.state_to_obs(self.env.states[s]) for s in
-                            np.random.choice(np.arange(self.nS), 500)])
-            obs = obs.reshape(-1, self.nS)
+                            np.random.choice(np.arange(self.dim_S), 500)])
+            obs = obs.reshape(-1, self.dim_S)
             labels = self.get_act_for_policy(pi_e, obs)  # action labels
             loss, _ = self.sess.run([self.loss, self.step], feed_dict={
                 self.obs_ph: obs,
@@ -67,7 +67,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
         if self._policy is None:
             self._policy = np.array(
                 [self.evaluate_amn_policy([self.env.state_to_obs(s)]) for s in
-                 np.arange(self.nS)])
+                 np.arange(self.dim_S)])
         return self._policy
 
     def state_action_visitation_frequency(self):
@@ -78,18 +78,18 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
                 [trajectory[0] for trajectory in self.expert_demos])
             start_states = np.array([state[0] for state in path_states])
             start_state_count = np.bincount(start_states.astype(int),
-                                            minlength=self.nS)
+                                            minlength=self.dim_S)
             start_state_dist = start_state_count.astype(float) / len(
                 start_states)
             mu = np.tile(start_state_dist, (T, 1)).T
 
             self._policy = np.array(
                 [self.evaluate_amn_policy([self.env.state_to_obs(s)]) for s in
-                 np.arange(self.nS)])
+                 np.arange(self.dim_S)])
             for t in range(1, T):
                 mu[:, t] = 0
-                for s in range(self.nS):
-                    for a in range(self.nA):
+                for s in range(self.dim_S):
+                    for a in range(self.dim_A):
                         sp = np.flatnonzero(transition_matrix[
                                                 s, a])  # deterministic
                         # optimization

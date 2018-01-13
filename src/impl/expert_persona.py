@@ -3,12 +3,13 @@ from swlcommon import TraceLoader
 from swlcommon.personatrainer.persona import Persona
 
 from src.core.expert_agent import ExpertAgent
+from src.util.mandatory_activity_utils import maybe_increment_mad
 
 
 class ExpertPersonaAgent(ExpertAgent):
-    def __init__(self, person_model, env, learning_algorithm=None, persona=None,
-                 pid=None):
-        super(ExpertPersonaAgent, self).__init__(person_model, env,
+    def __init__(self, config, person_model, mdp, learning_algorithm=None,
+                 persona=None, pid=None):
+        super(ExpertPersonaAgent, self).__init__(config, person_model, mdp,
                                                  learning_algorithm)
 
         if persona is None:
@@ -69,20 +70,22 @@ class ExpertPersonaAgent(ExpertAgent):
         for path in trajectory_matrix:
             states = []
             actions = []
-            mad_curr = np.zeros(len(self.env.mandatory_activity_set),
+            mad_curr = np.zeros(len(self._person_model.mandatory_activity_set),
                                 dtype=bool)
             for t, step in enumerate(path):
-                state = self.env.G[t][step][str(mad_curr.astype(int))]['state']
-                if step in self.env.mandatory_activity_set:
-                    mad_curr = self.env._maybe_increment_mad(mad_curr, step)
+                state = self.mdp.state_graph[t][step][str(mad_curr.astype(int))]
+                if step in self._person_model.mandatory_activity_set:
+                    mad_curr = maybe_increment_mad(self._person_model,
+                                                   mad_curr, step)
                 if len(states) > 0:
-                    prev_state = self.env.states[states[-1]]
-                    available_actions = prev_state.available_actions
-                    if state in available_actions:
-                        act_ix = self.env._action_rev_map[state.symbol]
+                    prev_state = self.mdp.states[states[-1]]
+                    if state in prev_state.next_states:
+                        act_ix = self.mdp.reverse_action_map[state.symbol]
                     else:
-                        act_ix = self.env._action_rev_map[
-                            self.env.travel_mode_labels[0]]
+                        # We require travel between activities. Sometimes
+                        # this isn't captured in the trace.
+                        act_ix = self.mdp.reverse_action_map[
+                            self._person_model.travel_models.keys()[0]]
                     actions.append(act_ix)
                 states.append(state.state_id)
             trajectories.append(np.array(zip(states, actions)))

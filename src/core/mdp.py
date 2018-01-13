@@ -20,13 +20,14 @@ from cytoolz import memoize
 
 
 class MDP(six.with_metaclass(ABCMeta)):
-    def __init__(self, reward_function, transition, gamma, env):
+    def __init__(self, reward_function, transition, gamma):
         """ Markov Decision Problem (MDP) model
 
        For general MDPs, states and action can be continuous making it
        hard to efficiently represent them using standard data structures. In the
        case of discrete MDPs, it is straightforward to use array of comparable
        objects to represent the states.
+
        In the continuous cases, we assume that only a sample of the state and
        action spaces will be used, and these can also be represented a simple
        hashable data structure (indexed by state or action ids).
@@ -46,19 +47,12 @@ class MDP(six.with_metaclass(ABCMeta)):
                Represents the transition function for the MDP. All transition
                relevant details such as stochasticity are handled therein.
            gamma (float): MDP discount factor in the range [0, 1)
-           env (ActivityEnv):
-               The underlying environment (Emv) on which the MDP operates on
 
         """
         self._reward_function = reward_function
         self._transition = transition
         self._gamma = gamma
-        self._env = env
-        self._P = None
-
-    @property
-    def env(self):
-        return self._env
+        self._terminals = None
 
     @abstractproperty
     def S(self):
@@ -70,15 +64,14 @@ class MDP(six.with_metaclass(ABCMeta)):
         """ Set of actions in the MDP in an hashable container """
         raise NotImplementedError('Abstract property')
 
-    @abstractproperty
-    def T(self):
+    def T(self, state, action):
         """ Transition kernel"""
-        raise NotImplementedError('Abstract property')
+        return self._transition(state, action)
 
     @abstractmethod
-    def actions(self, state):
+    def available_actions(self, state):
         """Set of available actions given the state"""
-        raise NotImplementedError
+        raise NotImplementedError('Abstract method')
 
     @property
     def reward_function(self):
@@ -95,21 +88,15 @@ class MDP(six.with_metaclass(ABCMeta)):
             raise ValueError('MDP `discount` must be in [0, 1)')
         self._gamma = value
 
-    @memoize
     def R(self, state, action):
         return self._reward_function(state, action)
 
     @property
-    def transition_matrix(self):
-        if self._P is None:
-            P = np.zeros((self._env.nS, self._env.nA, self._env.nS))
-            for state in self._env.states.values():
-                for action in [self._env.actions[a] for a in
-                               self.actions(state)]:
-                    for p, sp in self.T(state, action):
-                        P[state.state_id, action.action_id, sp.state_id] = p
-            self._P = P
-        return self._P
+    def terminals(self):
+        if self._terminals is None:
+            self._terminals = self._env.terminals
+        return self._terminals
+
 
 ########################################################################
 
@@ -148,7 +135,9 @@ class TransitionFunction(six.with_metaclass(ABCMeta)):
          """
         raise NotImplementedError('Abstract method')
 
+
 ########################################################################
+
 
 class State(six.with_metaclass(ABCMeta, Hashable)):
     def __init__(self, state_id):
@@ -214,6 +203,7 @@ class Action(six.with_metaclass(ABCMeta, Hashable)):
 
 
 class RewardFunction(six.with_metaclass(ABCMeta)):
+
     def __init__(self, features, env=None, rmax=1.0, initial_weights=None):
         """ MDP reward function model
 
@@ -237,9 +227,14 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
         self._features = features
         self._env = env
         self._rmax = rmax
-        self._dim_phi = reduce(lambda x, y: x + y, [len(x) for x in features])
+        self._dim_phi = None
+        self._update_dim_phi()
         self._feature_matrix = None
         self._r = None
+
+    def _update_dim_phi(self):
+        self._dim_phi = reduce(lambda x, y: x + y, [len(x) for x in
+                                                    self._features])
 
     @abstractmethod
     def __call__(self, state, action):
@@ -264,14 +259,15 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
             **features (FeatureExtractor): List of features.
         """
         self._features += features
+        self._update_dim_phi()
 
     @property
     def dim_phi(self):
-        """Size of the feature space.
+        """ Dimension of the reward function"""
+        return self._dim_phi
 
-        Returns:
-            (int) dimensions of feature space, |\phi|.
-        """
+    def __len__(self):
+        """ Dimension of the reward function"""
         return self._dim_phi
 
     @property
@@ -285,19 +281,21 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
         """
         if self._feature_matrix is None:
             self._feature_matrix = np.zeros(
-                (self._env.nS, self._env.nA, self.dim_phi), dtype=np.float32)
+                (self._env.dim_S, self._env.dim_A, self.dim_phi),
+                dtype=np.float32)
             for state in list(self._env.states.values()):
-                actions = [self._env._action_rev_map[action.symbol] for action
-                           in state.available_actions]
+                action_ids = [self._env.reverse_action_map[next_state.symbol]
+                              for next_state in state.next_states]
                 s = state.state_id
-                for a in actions:
+                for a in action_ids:
                     if s in self._env.terminals:
                         self._feature_matrix[s, a] = np.zeros([self._dim_phi])
                     else:
-                        self._feature_matrix[s, a] = self.phi(s, a).T
+                        self._feature_matrix[s, a] = self.phi(state,
+                                                              self._env.actions[
+                                                                  a]).T
         return self._feature_matrix
 
-    @memoize
     def phi(self, state_id, action_id):
         """Computes the feature vector at a state and action.
 
@@ -313,13 +311,12 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
             nd.array[float]: |\phi| X 1 array of values corresponding to a
                             row of the feature matrix for the given state
                             and action.
-
         """
         state_id = self._env.states[state_id]
         if state_id in self._env.terminals or action_id == -1:
             return np.zeros(self._dim_phi)
         else:
-            action_id = self._env.actions[action_id]
+            action_id = self._env.available_actions[action_id]
         return np.concatenate(
             [feature(state_id, action_id) for feature in self._features])
 
@@ -327,19 +324,19 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
 ########################################################################
 
 class FeatureExtractor(six.with_metaclass(ABCMeta)):
-    def __init__(self, ident, size, **kwargs):
-        """
+    def __init__(self, name, size, **kwargs):
+        # type: (str, int, dict) -> None
+        """Extracts features given domain-specific representations of states
+        and actions.
 
         Args:
-            ident ():
-            size ():
-            **kwargs ():
+            name (str): Identifier for this extractor
+            size (int): Dimensions of the feature function
         """
         self._size = size
-        self.ident = ident
-        self._T = None
-        if '_env' in kwargs:
-            self.env = kwargs.pop('_env')
+        self.ident = name
+        if 'env' in kwargs:
+            self.env = kwargs.pop('env')
         else:
             self.env = None
 

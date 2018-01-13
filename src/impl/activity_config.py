@@ -54,7 +54,7 @@ class IRLConfig(ConfigManager):
         super(IRLConfig, self).__init__()
         self.num_iters = data.pop('num_iters', 10)
         self.traces_file_path = data.pop('traces_file_path', None)
-        self.horizon = data.pop('horizon', 1440)
+        self.horizon = data.pop('discretized_horizon', 1440)
         self.gamma = data.pop('gamma', 0.999)
         self.avi_tol = data.pop('avi_tol', 1e-4)
 
@@ -68,7 +68,7 @@ class ProfileBuilderConfig(ConfigManager):
             builder configuration parameters from path).
         """
         super(ProfileBuilderConfig, self).__init__(json_file=json_file)
-        self.segment_minutes = int(self.SEQUENCES_RESOLUTION.strip('min'))
+        self.interval_length = int(self.SEQUENCES_RESOLUTION.strip('min'))
 
 
 class HouseholdConfig(ConfigManager):

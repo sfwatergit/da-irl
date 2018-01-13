@@ -19,9 +19,9 @@ from itertools import izip
 
 import dateutil
 import matplotlib
-import numpy as np
 
 from src.impl.activity_config import ATPConfig
+from src.impl.env_builder import HouseholdEnvBuilder
 from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
 from src.util.math_utils import create_dir_if_not_exists
@@ -50,9 +50,6 @@ def run(config, log_dir):
 
     # da-irl
     from src.algos.maxent_irl import MaxEntIRL
-    from src.impl.activity_env import ActivityEnv
-    from src.impl.activity_mdp import ActivityMDP
-    from src.impl.activity_rewards import ActivityRewardFunction
     from src.impl.expert_persona import ExpertPersonaAgent
 
     ncpu = multiprocessing.cpu_count()
@@ -62,23 +59,30 @@ def run(config, log_dir):
                                inter_op_parallelism_threads=ncpu)
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
-    activity_env = ActivityEnv()
 
-    trace_files = get_trace_fnames(config.traces_dir)
+    env_builder = HouseholdEnvBuilder(config)
+
+    trace_files = get_trace_fnames(config.traces_dir, 1)
 
     def make_expert(idx, trace_file):
         def _thunk():
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
+            activity_env = env_builder.run()
+            person_model = \
+                config.household_params.household_model.household_member_models[
+                    idx]
             uid_df = TraceLoader.load_traces_from_csv(trace_file)
             persona = Persona(traces=uid_df, build_profile=True,
                               config_file=config.general_params
                               .profile_builder_config_file_path)
-            mdp = ActivityMDP(ActivityRewardFunction(activity_env),
-                              config.irl_params.gamma, activity_env)
-            learning_algorithm = MaxEntIRL(mdp)
-            return ExpertPersonaAgent(config, activity_env, learning_algorithm,
-                                      persona, idx)
+            mdp = activity_env.mdps[idx]
+            learning_algorithm = MaxEntIRL(mdp,
+                                           int(config.irl_params.horizon /
+                                           config.profile_params.interval_length))
+            return ExpertPersonaAgent(config, person_model, mdp,
+                                      learning_algorithm=learning_algorithm,
+                                      persona=persona, pid=idx)
 
         return _thunk
 
@@ -91,21 +95,6 @@ def run(config, log_dir):
     expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
                    izip(expert_agent.get_policy(), expert_agent.get_rewards(),
                         expert_agent.get_theta())]
-
-    init_theta = np.mean(
-        np.array([expert_data[0]['theta'], expert_data[1]['theta']]),
-        0).reshape(-1, 1)
-
-    # _env = ActivityMDP(ActivityLinearRewardFunction(activity_env,
-    # initial_theta=init_theta), 0.99, activity_env)
-    #
-    # model = ATPActorMimicIRL(_env, expert_data)
-    #
-    # dummy_expert = ExpertPersonaAgent(config, activity_env, MaxEntIRL(_env))
-    #
-    # for i in range(30):
-    #     model.train_amn()
-    # model.train(dummy_expert.trajectories)
 
     plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')

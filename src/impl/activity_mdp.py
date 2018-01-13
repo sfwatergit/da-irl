@@ -1,7 +1,8 @@
 import numpy as np
-from cytoolz import memoize
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
+from src.util.mandatory_activity_utils import maybe_increment_mad
+from src.util.misc_utils import reverse_action_map
 
 
 class ATPState(State):
@@ -10,7 +11,7 @@ class ATPState(State):
         self.symbol = symbol
         self._mad = mad  # mad == mandatory/mandatory activities done
         self.time_index = time_index
-        self.next_states = {}
+        self.next_states = []
         self.reachable_symbols = reachable_symbols
 
     @property
@@ -37,17 +38,23 @@ class ATPState(State):
 
 
 class ATPAction(Action):
-    def __init__(self, action_id, succ_ix):
+    def __init__(self, action_id, next_state_symbol):
+        """Deterministic actions for activity-travel MDP.
+
+        Args:
+            action_id ():
+            next_state_symbol ():
+        """
         super(ATPAction, self).__init__(action_id)
-        self._succ_ix = succ_ix
+        self._next_state_symbol = next_state_symbol
 
     @property
     def action_id(self):
         return self._action_id
 
     @property
-    def succ_ix(self):
-        return self._succ_ix
+    def next_state_symbol(self):
+        return self._next_state_symbol
 
     def __eq__(self, other):
         return self._action_id == other.action_id
@@ -56,7 +63,7 @@ class ATPAction(Action):
         return self.action_id.__hash__()
 
     def __str__(self):
-        return '{}:{}'.format(self._action_id, self._succ_ix)
+        return '{}:{}'.format(self._action_id, self._next_state_symbol)
 
     def __repr__(self):
         return self.__str__()
@@ -81,60 +88,89 @@ class ActivityState(ATPState):
 
 
 class ATPTransition(TransitionFunction):
-    def __init__(self, env):
-        TransitionFunction.__init__(self, env)
+    def __init__(self, state_graph, person_model):
+        self.person_model = person_model
+        self._state_graph = state_graph
+        TransitionFunction.__init__(self)
 
     def __call__(self, state, action, **kwargs):
-        if state.state_id in self._env.terminals:
-            goal_state = [s for s in self._env.home_goal_states if
-                          np.all(s.mad == state.mad)][0]
-            return np.array([(1.0, goal_state)])
+        # if state.state_id in self._env.terminals:
+        #     goal_state = [s for s in self._env.home_goal_states if
+        #                   np.all(s.mad == state.mad)][0]
+        #     return np.array([(1.0, goal_state)])
+        # else:
+        if action.next_state_symbol in self.person_model.mandatory_activity_set:
+            mad = maybe_increment_mad(self.person_model, state.mad,
+                                      action.next_state_symbol)
         else:
-            if action.succ_ix in self._env.mandatory_activity_set:
-                mad = self._env._maybe_increment_mad(state.mad, action.succ_ix)
-            else:
-                mad = state.mad
-            next_state = [s for s in state.available_actions if
-                          np.all(s.mad == mad) and (action.succ_ix == s.symbol)]
-            if len(next_state) > 0:
-                return np.array([(1.0, next_state[0])])
-            else:
-                return np.array([(1.0, self._env.home_goal_states[0])])
+            mad = state.mad
+        next_state = [s for s in state.next_states if
+                      np.all(s.mad == mad) and (
+                              action.next_state_symbol == s.symbol)]
+        return np.array([(1.0, next_state[0])])
 
 
 class ActivityMDP(MDP):
-    def __init__(self, reward_function, gamma, env):
-        transitions = ATPTransition(env)
-        super(ActivityMDP, self).__init__(reward_function, transitions, env.G,
-                                          gamma)
-        self._env = env
-        env.transition_matrix = self.transition_matrix
-        env.reward_function = self.reward_function
+    def __init__(self, person_model, reward_function, actions, states,
+                 state_graph, gamma):
+        self.person_model = person_model
+        self._state_graph = state_graph
+        self._T = ATPTransition(state_graph, self.person_model)
+        self._transition_matrix = None
+        self._actions = actions
+        self._states = states
+        self.reverse_action_map = reverse_action_map(actions)
+        super(ActivityMDP, self).__init__(reward_function, self._T, gamma)
 
-    @memoize
-    def actions(self, state):
-        return self._env.get_legal_actions_for_state(state.symbol)
+    @property
+    def states(self):
+        return self._states
+
+    @property
+    def state_graph(self):
+        return self._state_graph
+
+    @property
+    def actions(self):
+        return self._actions
 
     @property
     def S(self):
         """
-        The set of all activity states indices
+        The set of all state indices
+
+        Returns:
+            (list[int]): list of state indices
 
         """
-        return self._env.states.keys()
+        return self._states.keys()
 
     @property
     def A(self):
         """
-        The set of all action indices
+        The set of all action indices.
 
         Returns:
-
+            (list[int]): list of action indices
         """
-        return self._env.actions.keys()
+        return self._actions.keys()
 
     @property
-    def terminals(self):
-        if self._terminals is None:
-            self._terminals = self._env.terminals
-        return self._terminals
+    def transition_matrix(self):
+        dim_S = len(self.S)
+        dim_A = len(self.A)
+        if self._transition_matrix is None:
+            self._transition_matrix = np.zeros((dim_S, dim_A, dim_S))
+            for state in self._states.values():
+                for action_symbol in self.available_actions(state):
+                    action = self.actions[self.reverse_action_map[
+                        action_symbol]]
+                    for prob_next_state, next_state in self.T(state,
+                                                              action):
+                        self._transition_matrix[
+                            state.state_id, action.action_id,
+                            next_state.state_id] = prob_next_state
+        return self._transition_matrix
+
+    def available_actions(self, state):
+        return [next_state.symbol for next_state in state.next_states]

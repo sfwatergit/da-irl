@@ -109,6 +109,9 @@ class PersonModel(object):
         self.other_activity = self.activity_groups['other'][0]
         # self.mdp = ActivityMDP()
 
+    def __str__(self):
+        return "P-{}".format(self.agent_id)
+
 
 class HouseholdModel(object):
     def __init__(self, household_id, household_member_models):

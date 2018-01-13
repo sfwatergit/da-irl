@@ -94,7 +94,7 @@ class TMDP(MDP):
                  initial_state,
                  state_types,
                  action_types):
-        super(TMDP, self).__init__(reward_function, transition, graph=None, gamma=0, env=None)
+        super(TMDP, self).__init__(reward_function, transition, graph=None, gamma=0)
         self.action_types = action_types
         self._action_dict = dict((v, t) for v, t in enumerate(self.action_types))
         self._actions = None
@@ -117,8 +117,8 @@ class TMDP(MDP):
     def A(self):
         return self._action_dict
 
-    def actions(self, state):
-        return self._states[state].actions()
+    def available_actions(self, state):
+        return self._states[state].available_actions()
 
     @property
     def S(self):
@@ -142,7 +142,7 @@ class TMDP(MDP):
             for s_idx, state_x in enumerate(self.S):
                 if state_x in self._terminals:
                     continue
-                actions = state_x.actions()
+                actions = state_x.available_actions()
                 for a in actions:
                     Q[s_idx, a] = sum([o[0] * (r[s_idx][o[1].state_id] + V_prev[o[1].state_id])
                                        for o in actions[a].outcomes])
@@ -190,7 +190,7 @@ def mk_Trans_mat(mdp):
     nA = len(a_arr)
     P = np.zeros([nA, nS, nS], dtype=np.float32)
     for s in s_arr:
-        for a_idx, a in s.actions().items():
+        for a_idx, a in s.available_actions().items():
             outcomes = a.outcomes
             sps = [o.state_id for o in outcomes[:, 1]]
             ps = [p for p in outcomes[:, 0]]
