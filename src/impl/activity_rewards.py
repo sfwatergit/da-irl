@@ -4,7 +4,6 @@ import platform
 import matplotlib
 import numpy as np
 import tensorflow as tf
-from cytoolz import memoize
 
 from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, \
@@ -23,7 +22,7 @@ import matplotlib.pyplot as plt
 plt.interactive(False)
 
 
-class ActivityRewardFunction(RewardFunction):
+class ATPRewardFunction(RewardFunction):
 
     def __init__(self, config, person_model, env, rmax=1.0, opt_params=None,
                  nn_params=None, initial_theta=None):
@@ -45,7 +44,7 @@ class ActivityRewardFunction(RewardFunction):
         self.trip_features = self.make_travel_features(env)
         self._make_indices()
 
-        super(ActivityRewardFunction, self).__init__(
+        super(ATPRewardFunction, self).__init__(
             self.activity_features + self.trip_features, rmax=rmax,
             initial_weights=initial_theta, env=env)
 
@@ -72,7 +71,7 @@ class ActivityRewardFunction(RewardFunction):
                                        shape=[None, self.input_size],
                                        name='dim_phi')
 
-        reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim,
+        reward = fc_net(self.input_ph, n_layers=2, dim_hidden=self.h_dim,
                         out_act=None,
                         init=initial_theta, name=self.name)
 
@@ -88,12 +87,12 @@ class ActivityRewardFunction(RewardFunction):
         self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
         self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
 
-        self.grad_theta = tf.gradients(self.reward, self.theta, -self.grad_r)
+        self.grad_theta = tf.gradients(self.reward, self.theta, - self.grad_r)
 
         self.grad_theta = [
             tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in
             range(len(self.grad_l2))]
-        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 10.0)
+        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
 
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(

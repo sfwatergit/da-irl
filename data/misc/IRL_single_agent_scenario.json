@@ -1,7 +1,7 @@
 {
   "general_params": {
     "log_path": "data/logs/",
-    "profile_builder_config_file_path": "data/misc/initial_profile_builder_config.json",
+    "profile_builder_config_file_path": "initial_profile_builder_config.json",
     "traces_file_path": "/home/kat/data/micro_subset.parquet",
     "reward_dir": "rewards",
     "images_dir": "images",
@@ -42,11 +42,11 @@
             "is_joint": true
           },
           "W": {
-            "closing_time": "18:00:00",
+            "closing_time": "23:00:00",
             "earliest_end_time": "undefined",
-            "latest_start_time": "09:00:00",
-            "minimal_duration": "06:00:00",
-            "opening_time": "07:00:00",
+            "latest_start_time": "12:00:00",
+            "minimal_duration": "05:00:00",
+            "opening_time": "02:00:00",
             "typical_duration": "08:00:00",
             "site_type": "work",
             "is_mandatory": true,

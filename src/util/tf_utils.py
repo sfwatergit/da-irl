@@ -34,10 +34,10 @@ def fc_net(X, n_layers=2, dim_out=1, dim_hidden=32, act=tf.nn.elu,
     out = X
     if n_layers > 1:
         for i in range(n_layers):
-            out = fc(out, dim_hidden, scope='fc%d_%s'.format(name) % i,
+            out = fc(out, dim_hidden, scope='fc{}_{}'.format(i, name),
                      activation_fn=act,
                      initializer=init)
-    out = fc(out, dim_out, scope='fc%s_%s' % ('out', name),
+    out = fc(out, dim_out, scope='fc{}_{}'.format('out', name),
              activation_fn=out_act,
              initializer=init)
     return out
@@ -46,7 +46,7 @@ def fc_net(X, n_layers=2, dim_out=1, dim_hidden=32, act=tf.nn.elu,
 def compile_function(inputs, outputs):
     def run(*input_vals):
         sess = tf.get_default_session()
-        return sess.run(outputs, feed_dict=dict(zip(inputs, input_vals)))
+        return sess.add_agent(outputs, feed_dict=dict(zip(inputs, input_vals)))
 
     return run
 
@@ -307,14 +307,14 @@ ALREADY_INITIALIZED = set()
 def initialize():
     """Initialize all the uninitialized variables in the global scope."""
     new_variables = set(tf.global_variables()) - ALREADY_INITIALIZED
-    get_session().run(tf.variables_initializer(new_variables))
+    get_session().add_agent(tf.variables_initializer(new_variables))
     ALREADY_INITIALIZED.update(new_variables)
 
 
 def eval(expr, feed_dict=None):
     if feed_dict is None:
         feed_dict = {}
-    return get_session().run(expr, feed_dict=feed_dict)
+    return get_session().add_agent(expr, feed_dict=feed_dict)
 
 
 VALUE_SETTERS = collections.OrderedDict()
@@ -328,7 +328,7 @@ def set_value(v, val):
         set_endpoint = tf.placeholder(v.dtype)
         set_op = v.assign(set_endpoint)
         VALUE_SETTERS[v] = (set_op, set_endpoint)
-    get_session().run(set_op, feed_dict={set_endpoint: val})
+    get_session().add_agent(set_op, feed_dict={set_endpoint: val})
 
 
 # ================================================================
@@ -530,7 +530,8 @@ class _Function(object):
         # Update feed dict with givens.
         for inpt in self.givens:
             feed_dict[inpt] = feed_dict.get(inpt, self.givens[inpt])
-        results = get_session().run(self.outputs_update, feed_dict=feed_dict)[
+        results = get_session().add_agent(self.outputs_update,
+                                          feed_dict=feed_dict)[
                   :-1]
         if self.check_nan:
             if any(np.isnan(r).any() for r in results):
@@ -570,8 +571,8 @@ class _MemFriendlyFunction(object):
                           data_vals]
             for (var, val) in zip(self.data_inputs, slice_vals):
                 feed_dict[var] = val
-            results = tf.get_default_session().run(self.outputs,
-                                                   feed_dict=feed_dict)
+            results = tf.get_default_session().add_agent(self.outputs,
+                                                         feed_dict=feed_dict)
             if i_start == 0:
                 sum_results = results
             else:
@@ -733,7 +734,7 @@ class SetFromFlat(object):
         self.op = tf.group(*assigns)
 
     def __call__(self, theta):
-        get_session().run(self.op, feed_dict={self.theta: theta})
+        get_session().add_agent(self.op, feed_dict={self.theta: theta})
 
 
 class GetFlat(object):
@@ -742,7 +743,7 @@ class GetFlat(object):
                                             var_list])
 
     def __call__(self):
-        return get_session().run(self.op)
+        return get_session().add_agent(self.op)
 
 
 # ================================================================

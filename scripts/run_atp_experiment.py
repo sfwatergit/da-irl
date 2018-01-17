@@ -21,7 +21,7 @@ import dateutil
 import matplotlib
 
 from src.impl.activity_config import ATPConfig
-from src.impl.env_builder import HouseholdEnvBuilder
+from src.impl.env_builder import HouseholdEnvBuilder, AgentBuilder
 from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
 from src.util.math_utils import create_dir_if_not_exists
@@ -60,7 +60,9 @@ def run(config, log_dir):
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
 
-    env_builder = HouseholdEnvBuilder(config)
+    env_builder = HouseholdEnvBuilder(
+        config.household_params.household_model,
+        config.profile_params.interval_length,config.irl_params.horizon)
 
     trace_files = get_trace_fnames(config.traces_dir, 1)
 
@@ -68,18 +70,22 @@ def run(config, log_dir):
         def _thunk():
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
-            activity_env = env_builder.run()
+
+            # For single agent, use the first household member model.
             person_model = \
                 config.household_params.household_model.household_member_models[
-                    idx]
+                    0]
             uid_df = TraceLoader.load_traces_from_csv(trace_file)
             persona = Persona(traces=uid_df, build_profile=True,
                               config_file=config.general_params
                               .profile_builder_config_file_path)
-            mdp = activity_env.mdps[idx]
+            agent_builder = AgentBuilder(config, person_model)
+            env_builder.add_agent(agent_builder)
+            activity_env=env_builder.finalize_env()
+            mdp = activity_env.mdps[0]
             learning_algorithm = MaxEntIRL(mdp,
                                            int(config.irl_params.horizon /
-                                           config.profile_params.interval_length))
+                                               config.profile_params.interval_length))
             return ExpertPersonaAgent(config, person_model, mdp,
                                       learning_algorithm=learning_algorithm,
                                       persona=persona, pid=idx)

@@ -135,8 +135,8 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                                              optimize=False)
 
             state_visitation = np.expand_dims(new_state_visitation, axis=1)
-            #  Sum out over SA, but we need to normalize by
-            # discretized_horizon here.
+            #  Sum out over SA, but we need to normalize by discretized horizon.
+
             #  This is different from Ziebart's algorithm, but if we do not,
             #  we get a poor learning signal. This seems to be standard in
             #  implementations.

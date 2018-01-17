@@ -16,7 +16,6 @@ from functools import reduce
 # Third Party:
 import numpy as np
 import six
-from cytoolz import memoize
 
 
 class MDP(six.with_metaclass(ABCMeta)):
@@ -325,7 +324,6 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
 
 class FeatureExtractor(six.with_metaclass(ABCMeta)):
     def __init__(self, name, size, **kwargs):
-        # type: (str, int, dict) -> None
         """Extracts features given domain-specific representations of states
         and actions.
 
@@ -349,6 +347,7 @@ class FeatureExtractor(six.with_metaclass(ABCMeta)):
         """
         return self._size
 
+    @abstractmethod
     def __call__(self, state, action):
         """Extracts features for a given state and action pairing.
 

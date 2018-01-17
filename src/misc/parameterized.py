@@ -39,7 +39,7 @@ class Parameterized(object):
         tag_tuple = tuple(sorted(tags.items(), key=lambda x: x[0]))
         if tag_tuple not in self._cached_param_dtypes:
             params = self.get_params(**tags)
-            param_values = tf.get_default_session().run(params)
+            param_values = tf.get_default_session().add_agent(params)
             self._cached_param_dtypes[tag_tuple] = [val.dtype for val in param_values]
         return self._cached_param_dtypes[tag_tuple]
 
@@ -47,14 +47,14 @@ class Parameterized(object):
         tag_tuple = tuple(sorted(tags.items(), key=lambda x: x[0]))
         if tag_tuple not in self._cached_param_shapes:
             params = self.get_params(**tags)
-            param_values = tf.get_default_session().run(params)
+            param_values = tf.get_default_session().add_agent(params)
             self._cached_param_shapes[tag_tuple] = [val.shape for val in param_values]
         return self._cached_param_shapes[tag_tuple]
 
     def get_param_values(self, **tags):
         params = self.get_params(**tags)
         # import ipdb; ipdb.set_trace()
-        param_values = tf.get_default_session().run(params)
+        param_values = tf.get_default_session().add_agent(params)
         return flatten_tensors(param_values)
 
     def set_param_values(self, flattened_params, **tags):
@@ -76,7 +76,7 @@ class Parameterized(object):
             feed_dict[self._cached_assign_placeholders[param]] = value.astype(dtype)
             if debug:
                 print("setting value of %s" % param.name)
-        tf.get_default_session().run(ops, feed_dict=feed_dict)
+        tf.get_default_session().add_agent(ops, feed_dict=feed_dict)
 
     def flat_to_params(self, flattened_params, **tags):
         return unflatten_tensors(flattened_params, self.get_param_shapes(**tags))
@@ -88,7 +88,7 @@ class Parameterized(object):
 
     def __setstate__(self, d):
         Serializable.__setstate__(self, d)
-        tf.get_default_session().run(tf.initialize_variables(self.get_params()))
+        tf.get_default_session().add_agent(tf.initialize_variables(self.get_params()))
         self.set_param_values(d["params"])
 
 

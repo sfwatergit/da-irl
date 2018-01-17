@@ -31,9 +31,9 @@ import six
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction, \
-    ActivityMDP
+    ATPMDP, DeterministicTransition
 from src.impl.activity_model import PersonModel
-from src.impl.activity_rewards import ActivityRewardFunction
+from src.impl.activity_rewards import ATPRewardFunction
 from src.util.mandatory_activity_utils import get_mandatory_activities_done, \
     maybe_increment_mad
 
@@ -107,8 +107,6 @@ class StateBuilder(AbstractStateBuilder):
                                         individual
             mandatory_activity_set (str): the set of mandatory activities
                                         that the agent must perform each day.
-
-
 
         Args:
 
@@ -213,8 +211,7 @@ class StateBuilder(AbstractStateBuilder):
         state_graph = {}
         states = {}
         # Step backward through time from discretized_horizon to 0
-        for time_index in range(self.discretized_horizon, -1,
-                                -1):
+        for time_index in range(self.discretized_horizon, -1, -1):
             state_graph[time_index] = {}
             for symbol, next_symbols in self._get_states(time_index):
                 for mad in get_mandatory_activities_done(
@@ -224,8 +221,7 @@ class StateBuilder(AbstractStateBuilder):
                     if symbol not in state_graph[time_index]:
                         state_graph[time_index][symbol] = {}
                     State = ActivityState if symbol in self.activity_symbols \
-                        else \
-                        TravelState
+                        else TravelState
                     state = State(state_id, symbol, time_index, mad,
                                   next_symbols)
                     state_graph[time_index][symbol][str(mad)] = state
@@ -320,7 +316,7 @@ class AgentBuilder(object):
             env (ActivityEnv): Reference to environment.
 
         Returns:
-            mdp (ActivityMDP): The fully built MDP
+            mdp (ATPMDP): The fully built MDP
         """
         states, state_graph = self._build_states()
         self._build_transitions(states, state_graph)
@@ -328,10 +324,13 @@ class AgentBuilder(object):
         env.add_states(states)
         env.update_G(state_graph)
         env.add_actions(actions)
-        reward_function = ActivityRewardFunction(self.config,
-                                                 self.person_model, env)
-        mdp = ActivityMDP(self.person_model,reward_function, actions, states,
-                          state_graph, self.config.irl_params.gamma)
+        reward_function = ATPRewardFunction(self.config,
+                                            self.person_model, env)
+        transition_function = DeterministicTransition()
+        mdp = ATPMDP(self.person_model, reward_function,
+                     transition_function,
+                     actions, states,
+                     state_graph, self.config.irl_params.gamma)
         env.transition_matrix = mdp.transition_matrix
 
         return mdp
@@ -376,18 +375,10 @@ class AgentBuilder(object):
                     transition_builder.get_transitions(state,
                                                        self.person_model):
                 state.next_states.append(state_graph[next_time_index][
-                    next_activity][str(next_mad)])
+                                             next_activity][str(next_mad)])
 
 
 class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
-    def __init__(self, config):
-        """Base class for environment dynamics builder.
-
-        Args:
-            config (ATPConfig): General configuration parameters for
-                                ActivityEnv IRL
-        """
-        self.config = config
 
     @abstractmethod
     def _initialize_env(self):
@@ -396,87 +387,82 @@ class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
         raise NotImplementedError
 
     @abstractmethod
-    def run(self):
+    def add_agent(self, agent_builder):
         """Runs the ``StateBuilder`` and the ``TransitionBuilder``.
 
-        Returns:
-            (ActivityEnv): The ``Env`` with the dynamics fully built.
+        Args:
+            agent_builder (AgentBuilder):  An agent to
+                                           instantiate within the env
         """
         raise NotImplementedError
 
     @abstractmethod
-    def _finalize_env(self, env):
+    def finalize_env(self):
         """Hook to run any finalization of the environment.
 
-        Args:
-            env (ActivityEnv): The ActivityEnv to finalize.
         """
         raise NotImplementedError
 
 
 class HouseholdEnvBuilder(AbstractEnvBuilder):
-    def __init__(self, atp_config):
-        # type: (ATPConfig) -> None
+    def __init__(self, household_model, interval_length, horizon):
         """Builds an ``ActivityEnv`` that considers intra-household
         decision-making.
 
         Args:
-            atp_config (ATPConfig): Full set of configuration parameters for
-                                    ActivityEnv IRL.
+            household_model (HouseholdModel): Full set of configuration
+                                             parameters for ActivityEnv IRL.
+            horizon (int): Time horizon defining interval.
+            interval_length (int): Duration of discretization interval.
         """
-        super(HouseholdEnvBuilder, self).__init__(atp_config)
-        self.household_model = atp_config.household_params.household_model
+        self.interval_length = interval_length
+        self.horizon = horizon
+        self.household_model = household_model
+        self._initialize_env()
 
     def _initialize_env(self):
         # Instantiate an empty environment:
-        return ActivityEnv()
+        self.env = ActivityEnv()
 
-    def run(self):
+    def add_agent(self, agent_builder):
         """Main method for running all components of the ``EnvBuilder``
         cycle.
+
+        Permits instantiating multiple agent MDPs in the environment.
+        The role of this method is to ensure that the dynamics cohere.
 
         Returns:
             (ActivityEnv): Fully initialized environment with all relevant
             properties available for use by algorithmic framework.
         """
-        env = self._initialize_env()
 
         # Build states for each individual in the household
         # (independently of each other):
+        self.env.mdps.append(agent_builder.build_mdp(self.env))
 
-        for agent_id, person_model in \
-                self.household_model.household_member_models.items():
-            agent_builder = AgentBuilder(self.config, person_model)
-            agent_mdp = agent_builder.build_mdp(env)
-            env.mdps[agent_id] = agent_mdp
-
-        # Finalize convenience properties of environment here.
-        self._finalize_env(env)
-        return env
-
-    def _finalize_env(self, env):
+    def finalize_env(self):
         """A few additional tasks to complete for the sake of convenience.
 
-        This method assumes that the state graph has already been built.
+        This method assumes that the state graph has already been built for all
+        agents in the mdp.
         """
         # initialize environment action_space and state_space
-        env.dim_A = len(env.actions)
-        env.dim_S = len(env.states)
+        self.env.dim_A = len(self.env.actions)
+        self.env.dim_S = len(self.env.states)
         # set some other useful properties
-        env.horizon = self.config.irl_params.horizon
-        # TODO: Either create profile builder config for household and/or ensure
-        # profile builder params are identical b/w agents.
-        env.interval_length = self.config.profile_params.interval_length
-        # XXXX: For now, just use first available symbol for
-        # home_activity. Later, remember this must eventually be done for
-        # potentially multiple agents.
-        env.home_activity = \
-            self.config.household_params.household_model.home_activity_symbols[
-                0]
-        env.home_start_state = env.g[0][env.home_activity].values()[0]
-        env.home_goal_states.extend(
-            env.g[env.horizon / self.config.profile_params.interval_length][
-                env.home_activity].values())
+        self.env.horizon = self.horizon
+        self.env.interval_length = self.interval_length
+
+        # Assume same start and possible terminal activities for all agents
+        # in household.
+        self.env.home_activity = \
+            self.household_model.home_activity_symbols[0]
+        self.env.home_start_state = \
+            self.env.g[0][self.env.home_activity].values()[0]
+        self.env.home_goal_states.extend(
+            self.env.g[self.horizon / self.interval_length]
+            [self.env.home_activity].values())
+        return self.env
 
 
 ########################################################################
@@ -486,5 +472,6 @@ if __name__ == '__main__':
     with open(config_file, 'r') as fp:
         config = ATPConfig(data=json.load(fp))
     env_builder = HouseholdEnvBuilder(config)
-    env = env_builder.run()
+
+    env = env_builder.add_agent()
     print('done')

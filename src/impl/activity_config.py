@@ -1,6 +1,8 @@
 """
 Defines experiment-specific configuration parameters for da-irl.
 """
+import os.path as osp
+
 from src.impl.activity_model import ActivityModel, TravelModel, PersonModel, \
     HouseholdModel
 from src.misc.config import ConfigManager
@@ -34,8 +36,12 @@ class GeneralConfig(ConfigManager):
             parameter keys to values.
         """
         super(GeneralConfig, self).__init__()
-        self.profile_builder_config_file_path = data.pop(
-            'profile_builder_config_file_path')
+        self.root_path = osp.normpath(osp.join(osp.dirname(__file__),
+                                               '../../data'))
+        self.config_path = osp.join(self.root_path, 'misc')
+        self.profile_builder_config_file_path = osp.join(self.config_path,
+                                                         data.pop(
+                                                             'profile_builder_config_file_path'))
         self.traces_file_path = data.pop('traces_file_path')
         self.log_path = data.pop("log_path", "data")
         self.reward_dir = data.pop("reward_dir", "/rewards")
@@ -88,10 +94,15 @@ class HouseholdConfig(ConfigManager):
         for member in members:
             agent_id = member["agent_id"]
             member_data[agent_id] = PersonModel(agent_id,
-                dict((act, ActivityModel(act, atp)) for act, atp in
-                     member.pop('activity_params').items()),
-                dict((tm, TravelModel(tm, atp)) for tm, atp in
-                     member.pop('travel_params').items()))
+                                                dict((act,
+                                                      ActivityModel(act, atp))
+                                                     for act, atp in
+                                                     member.pop(
+                                                         'activity_params').items()),
+                                                dict((tm, TravelModel(tm, atp))
+                                                     for tm, atp in
+                                                     member.pop(
+                                                         'travel_params').items()))
 
         self.household_model = HouseholdModel(data.pop("household_id", None),
                                               member_data)

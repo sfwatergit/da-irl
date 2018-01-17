@@ -30,8 +30,8 @@ from src.algos.actor_mimic import ATPActorMimicIRL
 from src.algos.maxent_irl import MaxEntIRL
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
-from src.impl.activity_mdp import ActivityMDP
-from src.impl.activity_rewards import ActivityRewardFunction
+from src.impl.activity_mdp import ATPMDP
+from src.impl.activity_rewards import ATPRewardFunction
 from src.impl.expert_persona import ExpertPersonaAgent
 from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
@@ -87,8 +87,8 @@ def run(config, log_dir):
         def _thunk():
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
-            mdp = ActivityMDP(ActivityRewardFunction(activity_env),
-                              config.irl_params.gamma, activity_env)
+            mdp = ATPMDP(ATPRewardFunction(activity_env),
+                         config.irl_params.gamma, activity_env)
             learning_algorithm = MaxEntIRL(mdp)
             return ExpertPersonaAgent(config, activity_env, learning_algorithm,
                                       persona, idx)
@@ -122,8 +122,8 @@ def run(config, log_dir):
     init_theta = np.squeeze(
         np.array([expert['theta'] for expert in expert_data])).mean(0)
     init_theta = np.expand_dims(init_theta, 1)
-    mdp = ActivityMDP(
-        ActivityRewardFunction(activity_env, initial_theta=init_theta),
+    mdp = ATPMDP(
+        ATPRewardFunction(activity_env, initial_theta=init_theta),
         config.irl_params.gamma,
         activity_env)
 
@@ -144,9 +144,9 @@ def run(config, log_dir):
         exp_dir = osp.join(log_dir, 'expert_%s' % pid)
         logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(
-            ActivityRewardFunction(activity_env, nn_params=nn_params,
-                                   initial_theta=teacher.reward.get_theta()),
+        mdp = ATPMDP(
+            ATPRewardFunction(activity_env, nn_params=nn_params,
+                              initial_theta=teacher.reward.get_theta()),
             config.irl_params.gamma,
             activity_env)
         student = ExpertPersonaAgent(config, activity_env,
@@ -164,8 +164,8 @@ def run(config, log_dir):
         exp_dir = osp.join(log_dir, 'expert_%s' % pid)
         logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(
-            ActivityRewardFunction(activity_env, nn_params=nn_params),
+        mdp = ATPMDP(
+            ATPRewardFunction(activity_env, nn_params=nn_params),
             config.irl_params.gamma,
             activity_env)
         student = ExpertPersonaAgent(config, activity_env,
@@ -183,9 +183,9 @@ def run(config, log_dir):
         exp_dir = osp.join(log_dir, 'expert_%s' % pid)
         logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(
-            ActivityRewardFunction(activity_env, nn_params=nn_params,
-                                   initial_theta=teacher.reward.get_theta()),
+        mdp = ATPMDP(
+            ATPRewardFunction(activity_env, nn_params=nn_params,
+                              initial_theta=teacher.reward.get_theta()),
             config.irl_params.gamma,
             activity_env)
 
@@ -202,8 +202,8 @@ def run(config, log_dir):
         exp_dir = osp.join(log_dir, 'expert_%s' % pid)
         logger.set_snapshot_dir(exp_dir)
         nn_params.update({'name': '{}'.format(idx)})
-        mdp = ActivityMDP(
-            ActivityRewardFunction(activity_env, nn_params=nn_params),
+        mdp = ATPMDP(
+            ATPRewardFunction(activity_env, nn_params=nn_params),
             config.irl_params.gamma,
             activity_env)
 

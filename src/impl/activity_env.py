@@ -31,7 +31,7 @@ class ActivityEnv(gym.Env):
         self.home_goal_states = []
         self.terminals = []
 
-        self.mdps = {}
+        self.mdps = []
 
         self.dim_A = None
         self.dim_S = None

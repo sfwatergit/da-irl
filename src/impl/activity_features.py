@@ -1,10 +1,7 @@
-from __future__ import print_function
-
 import re
 from abc import abstractmethod
 
 import numpy as np
-from numpy import ndarray
 
 from src import ATPConfig
 from src.core.mdp import FeatureExtractor
@@ -14,24 +11,17 @@ from src.util.misc_utils import str_to_mins
 
 
 class TravelFeature(FeatureExtractor):
-    """
-    Specialized `FeatureExtractor` for resolving features of `Trip`
-    `TourElement`s.
-    """
     def __init__(self, name, size, person_model, interval_length, **kwargs):
         super(TravelFeature, self).__init__(name, size, **kwargs)
         self.person_model = person_model
         self.interval_length = interval_length
 
-    @abstractmethod
     def __call__(self, state, action):
-        # type: (TravelState, ATPAction) -> ndarray
         raise NotImplementedError("Must implement __call__")
 
 
 class TravelTimeDisutilityFeature(TravelFeature):
     def __init__(self, mode, person_model, interval_length, **kwargs):
-        # type: (str, PersonModel, dict) -> None
         size = 1
         ident = mode
         super(TravelTimeDisutilityFeature, self).__init__(mode, 1, person_model,
@@ -39,7 +29,6 @@ class TravelTimeDisutilityFeature(TravelFeature):
                                                           **kwargs)
 
     def __call__(self, state, action):
-        # type: (TravelState, ATPAction) -> np.array
         if isinstance(state, ActivityState):
             return np.array([0])
         mode_params = self.person_model.travel_models[state.symbol]
@@ -60,6 +49,8 @@ class TravelTimeDisutilityFeature(TravelFeature):
 
     def __repr__(self):
         return self.__str__()
+
+
 
 
 # class TravelDistanceDisutilityFeature(TripFeature):
@@ -93,6 +84,7 @@ class TravelTimeDisutilityFeature(TravelFeature):
 #         return self.__str__()
 #
 
+
 class ActivityFeature(FeatureExtractor):
     """
     Specialized `FeatureExtractor` for resolving features of `Activity`
@@ -106,7 +98,6 @@ class ActivityFeature(FeatureExtractor):
 
     def __call__(self, state, action):
         print(state, action)
-
 
 # class EarlyDepartureFeature(ActivityFeature):
 #     def __init__(self, activity_params, **kwargs):
@@ -186,7 +177,6 @@ class ActivityFeature(FeatureExtractor):
 #         else:
 #             return np.array([0])
 
-
 # class EndDayAtHomeFeature(ActivityFeature):
 #     def __init__(self, person_model, interval_length, **kwargs):
 #         size = 1
@@ -216,7 +206,8 @@ class EarlyArrivalFeature(ActivityFeature):
                                        self.interval_length, (
                                                state.time_index + 1) * \
                                        self.interval_length
-        next_state = self.env.mdps[self.person_model.agent_id].T(state,action)
+        next_state = self.env.mdps[self.person_model.agent_id].T(state,
+                                                                 action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -236,6 +227,8 @@ class EarlyArrivalFeature(ActivityFeature):
             return np.array([0])
 
 
+
+
 class LateArrivalFeature(ActivityFeature):
     def __init__(self, person_model, interval_length, **kwargs):
         size = 1
@@ -245,7 +238,8 @@ class LateArrivalFeature(ActivityFeature):
                                                  **kwargs)
 
     def __call__(self, state, action):
-        next_state = self.env.mdps[self.person_model.agent_id].T(state,action)
+        next_state = self.env.mdps[self.person_model.agent_id].T(state,
+                                                                 action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -263,7 +257,6 @@ class LateArrivalFeature(ActivityFeature):
             return np.array([hr_late])
         else:
             return np.array([0])
-
 
 # class TooShortDurationFeature(ActivityFeature):
 #     def __init__(self, activity_params, **kwargs):
@@ -314,8 +307,8 @@ class LateArrivalFeature(ActivityFeature):
 #         else:
 #             return np.array([0])
 
+
 def create_act_at_x_features(where, when, interval_length, person_model):
-    # type: (int, str, int, PersonModel) -> ActivityFeature
     """
 
     Args:

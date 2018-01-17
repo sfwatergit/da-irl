@@ -1,7 +1,6 @@
 import numpy as np
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
-from src.util.mandatory_activity_utils import maybe_increment_mad
 from src.util.misc_utils import reverse_action_map
 
 
@@ -23,7 +22,8 @@ class ATPState(State):
         self._mad = new_mad
 
     def __str__(self):
-        return '{}:[{}, {}]'.format(self.state_id, self.symbol, str(self._mad))
+        return '{}:[{}, {}, {}]'.format(self.state_id, self.time_index,
+                                        self.symbol, str(self._mad))
 
     def __repr__(self):
         return self.__str__()
@@ -87,40 +87,28 @@ class ActivityState(ATPState):
                                             mad, reachable_symbols)
 
 
-class ATPTransition(TransitionFunction):
-    def __init__(self, state_graph, person_model):
-        self.person_model = person_model
-        self._state_graph = state_graph
+class DeterministicTransition(TransitionFunction):
+    def __init__(self):
         TransitionFunction.__init__(self)
 
     def __call__(self, state, action, **kwargs):
-        # if state.state_id in self._env.terminals:
-        #     goal_state = [s for s in self._env.home_goal_states if
-        #                   np.all(s.mad == state.mad)][0]
-        #     return np.array([(1.0, goal_state)])
-        # else:
-        if action.next_state_symbol in self.person_model.mandatory_activity_set:
-            mad = maybe_increment_mad(self.person_model, state.mad,
-                                      action.next_state_symbol)
-        else:
-            mad = state.mad
-        next_state = [s for s in state.next_states if
-                      np.all(s.mad == mad) and (
-                              action.next_state_symbol == s.symbol)]
+        next_state = [next_state for next_state in state.next_states if
+                      next_state.symbol == action.next_state_symbol]
         return np.array([(1.0, next_state[0])])
 
 
-class ActivityMDP(MDP):
-    def __init__(self, person_model, reward_function, actions, states,
+class ATPMDP(MDP):
+    def __init__(self, person_model, reward_function, transition, actions,
+                 states,
                  state_graph, gamma):
         self.person_model = person_model
         self._state_graph = state_graph
-        self._T = ATPTransition(state_graph, self.person_model)
+        self._T = transition
         self._transition_matrix = None
         self._actions = actions
         self._states = states
         self.reverse_action_map = reverse_action_map(actions)
-        super(ActivityMDP, self).__init__(reward_function, self._T, gamma)
+        super(ATPMDP, self).__init__(reward_function, self._T, gamma)
 
     @property
     def states(self):
