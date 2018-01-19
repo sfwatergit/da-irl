@@ -22,18 +22,18 @@ def set_global_seeds(i):
     random.seed(i)
 
 
-def get_trace_fnames(trace_dir, n=2):
+def get_trace_fnames(traces_dir, n=2):
     print('Looking for traces')
     import re
     itr_reg = re.compile(r"traces_persona_(?P<expert_num>[0-9]+)\.csv")
 
     expert_file_data = []
-    for idx, trace_file in enumerate(os.listdir(trace_dir)):
+    for idx, trace_file in enumerate(os.listdir(traces_dir)):
         m = itr_reg.match(trace_file)
         if m:
             expert_num = m.group('expert_num')
             expert_file_data.append(
-                [expert_num, os.path.join(trace_dir, m.group())])
+                [expert_num, os.path.join(traces_dir, m.group())])
 
     expert_file_data = sorted(expert_file_data, key=lambda x: int(x[0]),
                               reverse=False)[:n]

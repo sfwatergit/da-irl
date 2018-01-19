@@ -71,7 +71,7 @@ class ATPRewardFunction(RewardFunction):
                                        shape=[None, self.input_size],
                                        name='dim_phi')
 
-        reward = fc_net(self.input_ph, n_layers=2, dim_hidden=self.h_dim,
+        reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim,
                         out_act=None,
                         init=initial_theta, name=self.name)
 

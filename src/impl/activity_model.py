@@ -3,7 +3,6 @@ from collections import OrderedDict
 
 import six
 
-from src.impl.activity_mdp import ATPMDP
 from src.util.math_utils import to_onehot
 from src.util.misc_utils import bag_by_type
 

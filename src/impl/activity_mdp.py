@@ -92,9 +92,28 @@ class DeterministicTransition(TransitionFunction):
         TransitionFunction.__init__(self)
 
     def __call__(self, state, action, **kwargs):
+        """The next state is deterministic and equivalent to the state symbol
+        for the action with probability 1.0.
+
+        Args:
+            state (ATPState): Current state (assumed to have a list of
+                next_states representing reachable ``ATPStates``.
+            action (ATPAction): The symbol representing the next state chosen.
+            **kwargs (dict):
+
+        Returns:
+            (nd.array[tuple]): A tuple of reachable next states and attendant
+                probabilities of reaching next_state (this is deterministic,
+                so always 1.0). If the next state is unavailable, then stay
+                at the current state (assumed to be terminal).
+        """
         next_state = [next_state for next_state in state.next_states if
                       next_state.symbol == action.next_state_symbol]
-        return np.array([(1.0, next_state[0])])
+        if len(next_state) > 0:
+            return np.array([(1.0, next_state[0])])
+        else:
+            # TODO: Assert return of default is actually terminal?
+            return np.array([(1.0, state)])
 
 
 class ATPMDP(MDP):

@@ -12,13 +12,14 @@ import numpy as np
 import six
 
 from src.algos.base import IRLAlgorithm
+from src.algos.planning import SoftValueIteration
 from src.misc import logger
 from src.util.math_utils import softmax
 
 INF = np.nan_to_num([1 * float("-inf")])
 
 
-class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
+class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
 
     def __init__(self, mdp, discretized_horizon, avi_tol=1e-4, verbose=False,
                  policy=None):
@@ -88,31 +89,6 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
         savf /= len(self.expert_demos)
         return savf
 
-    def approximate_value_iteration(self):
-        """Computes maximum entropy policy given current reward function and
-        discretized_horizon via softmax value iteration.
-
-        Returns:
-            policy (np.ndarray):  An dim_S x dim_A policy based on reward
-            parameters.
-
-        """
-
-        reward = self.reward.get_rewards()
-
-        Q = np.zeros([self.dim_S, self.dim_A], dtype=np.float32)
-        diff = float("inf")
-
-        while diff > 1e-4:
-            V = softmax(Q)
-            Qp = reward + self.mdp.gamma * self.mdp.transition_matrix.dot(V)
-            diff = np.amax(abs(Q - Qp))
-            Q = Qp
-
-        pi = self._compute_policy(Q).astype(np.float32)
-
-        return pi
-
     def state_visitation_frequency(self):
         """Given the policy estimated at this iteration, computes the frequency
         with which a state and action are visited.
@@ -175,7 +151,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
                     # algo)
                     policy_skip_iters -= 1
                 else:
-                    self._policy = self.approximate_value_iteration()
+                    self._policy = self.solve(self.mdp)
                 logger.log("Computed policy in {:,.2f} seconds".format(
                     time.time() - polopt_start_time))
 
@@ -247,18 +223,4 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm)):
             [np.sum([np.log(self.policy[s, a]) for s, a in example]) for example
              in self.expert_demos])
 
-    @staticmethod
-    def _compute_policy(q_fn, ent_wt=1.0):
-        """Return a stochastic policy (softmax distribution over actions given
-        current state) by normalizing a Q-function.
 
-        Args:
-            q_fn (np.ndarray): A dim_S x dim_A state-action value
-            (Q) function.
-        """
-        v_rew = softmax(q_fn)
-        adv_rew = q_fn - np.expand_dims(v_rew, axis=1)
-        pol_probs = np.exp((1.0 / ent_wt) * adv_rew)
-        assert np.all(np.isclose(np.sum(pol_probs, axis=1), 1.0)), str(
-            pol_probs)
-        return pol_probs

@@ -311,13 +311,7 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
                             row of the feature matrix for the given state
                             and action.
         """
-        state_id = self._env.states[state_id]
-        if state_id in self._env.terminals or action_id == -1:
-            return np.zeros(self._dim_phi)
-        else:
-            action_id = self._env.available_actions[action_id]
-        return np.concatenate(
-            [feature(state_id, action_id) for feature in self._features])
+        raise NotImplementedError('Abstract method must be implemented')
 
 
 ########################################################################
