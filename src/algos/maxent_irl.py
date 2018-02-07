@@ -12,14 +12,14 @@ import numpy as np
 import six
 
 from src.algos.base import IRLAlgorithm
-from src.algos.planning import SoftValueIteration
+from src.algos.planning import SoftValueIteration, TFValueIteration
 from src.misc import logger
-from src.util.math_utils import softmax
 
 INF = np.nan_to_num([1 * float("-inf")])
 
 
-class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
+class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm,
+                                   TFValueIteration)):
 
     def __init__(self, mdp, discretized_horizon, avi_tol=1e-4, verbose=False,
                  policy=None):
@@ -41,7 +41,8 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
             forward algorithm.
             avi_tol (float): Convergence tolerance used to compute softmax
                              value iteration.
-            mdp  (core.mdp.MDP): The mdp describing the expert agent's dynamics.
+            mdp  (core._mdp.MDP): The _mdp describing the expert agent's
+            dynamics.
 
         Attr:
             expert_demos (nd.array): dim_S x dim_A set of demonstrations used
@@ -50,9 +51,9 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
             default).
 
         """
+        super(MaxEntIRL, self).__init__(mdp)
         self.discretized_horizon = discretized_horizon
         self.avi_tol = avi_tol
-        self.mdp = mdp
         self.dim_S = len(self.mdp.S)
         self.dim_A = len(self.mdp.A)
         self.expert_demos = None
@@ -138,6 +139,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
         mu_D = self.get_empirical_savf()
 
         start_time = time.time()
+        Q_init = None
         for itr in range(num_iters):
             # Begin each iteration of IRL here:
             logger.record_tabular("Iteration", itr)
@@ -151,7 +153,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
                     # algo)
                     policy_skip_iters -= 1
                 else:
-                    self._policy = self.solve(self.mdp)
+                    self._policy, Q_init = self.solve(Q_init)
                 logger.log("Computed policy in {:,.2f} seconds".format(
                     time.time() - polopt_start_time))
 
@@ -165,7 +167,9 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
                 # Compute gradient signal and apply to model, backpropping
                 # if deep IRL:
                 logger.log("Optimizing reward...")
+
                 grad_r = mu_D - svf
+
                 grad_theta, l2_loss, grad_norm = self.reward.apply_grads(grad_r)
 
                 # Compute stats
@@ -222,5 +226,3 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm, SoftValueIteration)):
         return np.sum(
             [np.sum([np.log(self.policy[s, a]) for s, a in example]) for example
              in self.expert_demos])
-
-

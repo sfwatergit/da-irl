@@ -1,3 +1,7 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 import numpy as np
 
 from src.core.mdp import TransitionFunction, State, Action, MDP
@@ -33,8 +37,7 @@ class ATPState(State):
 
     def __eq__(self, other):
         return self.state_id == other.state_id and self.time_index == \
-               other.time_index and np.all(
-            self.mad == other.mad)
+               other.time_index and str(self.mad) == str(other.mad)
 
 
 class ATPAction(Action):
@@ -88,8 +91,8 @@ class ActivityState(ATPState):
 
 
 class DeterministicTransition(TransitionFunction):
-    def __init__(self):
-        TransitionFunction.__init__(self)
+    def __init__(self, env):
+        TransitionFunction.__init__(self, env)
 
     def __call__(self, state, action, **kwargs):
         """The next state is deterministic and equivalent to the state symbol
@@ -107,19 +110,24 @@ class DeterministicTransition(TransitionFunction):
                 so always 1.0). If the next state is unavailable, then stay
                 at the current state (assumed to be terminal).
         """
-        next_state = [next_state for next_state in state.next_states if
-                      next_state.symbol == action.next_state_symbol]
-        if len(next_state) > 0:
-            return np.array([(1.0, next_state[0])])
+        next_states = [self._env.states[ns] for ns in self._env.G.successors(
+            state.state_id) if
+                       self._env.states[ns].symbol == action.next_state_symbol]
+
+        if len(next_states) > 0:
+            return np.array([(1.0, next_states[0])])
         else:
             # TODO: Assert return of default is actually terminal?
-            return np.array([(1.0, state)])
+            return np.array([(0.0, state)])
 
 
 class ATPMDP(MDP):
     def __init__(self, person_model, reward_function, transition, actions,
                  states,
-                 state_graph, gamma):
+                 state_graph, gamma,horizon,interval_length,
+                 is_deterministic=False):
+        self.interval_length = interval_length
+        self.horizon = horizon
         self.person_model = person_model
         self._state_graph = state_graph
         self._T = transition
@@ -127,6 +135,7 @@ class ATPMDP(MDP):
         self._actions = actions
         self._states = states
         self.reverse_action_map = reverse_action_map(actions)
+        self.is_deterministic = is_deterministic
         super(ATPMDP, self).__init__(reward_function, self._T, gamma)
 
     @property
@@ -170,14 +179,14 @@ class ATPMDP(MDP):
             self._transition_matrix = np.zeros((dim_S, dim_A, dim_S))
             for state in self._states.values():
                 for action_symbol in self.available_actions(state):
-                    action = self.actions[self.reverse_action_map[
-                        action_symbol]]
-                    for prob_next_state, next_state in self.T(state,
-                                                              action):
+                    action = self.actions[
+                        self.reverse_action_map[action_symbol]]
+                    for prob_next_state, next_state in self.T(state, action):
                         self._transition_matrix[
                             state.state_id, action.action_id,
                             next_state.state_id] = prob_next_state
         return self._transition_matrix
 
     def available_actions(self, state):
-        return [next_state.symbol for next_state in state.next_states]
+        return [self.states[next_state].symbol for next_state in
+                self.state_graph.successors(state.state_id)]

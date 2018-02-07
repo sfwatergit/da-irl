@@ -1,3 +1,7 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 from itertools import combinations
 
 import numpy as np
@@ -64,5 +68,7 @@ def maybe_increment_mad(person_model, current_mad,
 
     """
     return current_mad.astype(int) + \
-           (person_model.mandatory_activity_map[next_activity_symbol]
-            .astype(bool) & ~current_mad).astype(int)
+    (person_model.mandatory_activity_map[next_activity_symbol]
+     .astype(bool) & ~current_mad).astype(
+        int) if next_activity_symbol in person_model.mandatory_activity_set else \
+        current_mad

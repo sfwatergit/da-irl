@@ -1,8 +1,16 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
+import multiprocessing
 import os
 import random
 from itertools import groupby
 
 import numpy as np
+
+# Global variable setting number of cpus to use in TF and other algos.
+NCPU = multiprocessing.cpu_count()
 
 
 def set_global_seeds(i):

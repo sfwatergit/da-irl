@@ -22,12 +22,17 @@ following general algorithm:
 Designed with modularity in mind so that StateBuilder and TransitionBuilder
 components can be extended and/or switched out.
 """
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 import json
 import sys
 from abc import ABCMeta, abstractmethod
 
 import six
 
+from src.core.state_graph import StateGraph
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction, \
@@ -60,7 +65,7 @@ class AbstractStateBuilder(six.with_metaclass(ABCMeta)):
                                      ``interval_length``.
         """
         self.person_model = person_model
-        self.discretized_horizon = horizon / interval_length
+        self.discretized_horizon = int(horizon / interval_length)
         self.agent_id = agent_id
 
     @abstractmethod
@@ -182,7 +187,12 @@ class StateBuilder(AbstractStateBuilder):
         if next_time_index >= self.discretized_horizon:
             return [self.home_activity_symbol]
         elif next_time_index == self.discretized_horizon - 1:
-            return [self.home_activity_symbol] + self.travel_mode_symbols
+            if current_symbol in self.travel_mode_symbols:
+                return [self.home_activity_symbol]
+            elif current_symbol == self.home_activity_symbol:
+                return [self.home_activity_symbol]
+            else:
+                return self.travel_mode_symbols
         else:
             if current_symbol in self.activity_symbols:
                 res = [current_symbol] + self.travel_mode_symbols
@@ -202,66 +212,6 @@ class StateBuilder(AbstractStateBuilder):
         for symbol in self._get_possible_symbols(time_index):
             yield symbol, self._get_next_reachable_symbols(symbol,
                                                            time_index)
-
-    def run(self):
-        """Returns a generator that populates an environments' states and
-        state graph.
-        """
-        state_id = 0
-        state_graph = {}
-        states = {}
-        # Step backward through time from discretized_horizon to 0
-        for time_index in range(self.discretized_horizon, -1, -1):
-            state_graph[time_index] = {}
-            for symbol, next_symbols in self._get_states(time_index):
-                for mad in get_mandatory_activities_done(
-                        self.person_model, time_index):
-                    # check prevents overwriting dict at
-                    # state_graph.g[time_index][symbol]
-                    if symbol not in state_graph[time_index]:
-                        state_graph[time_index][symbol] = {}
-                    State = ActivityState if symbol in self.activity_symbols \
-                        else TravelState
-                    state = State(state_id, symbol, time_index, mad,
-                                  next_symbols)
-                    state_graph[time_index][symbol][str(mad)] = state
-                    states[state_id] = state
-                    state_id += 1
-        return states, state_graph
-
-
-########################################################################
-
-
-class AbstractTransitionBuilder(six.with_metaclass(ABCMeta)):
-    def __init__(self, household_model, horizon, interval_length):
-        """A modular transition builder object that is designed to create a
-        generator for transitions from states in an ``ActivityEnv``.
-
-        Args:
-            horizon (int): This is the maximum index of time used to
-                           discretize the agent's day. It is assumed that the
-                           day starts at index 0 and continues through index
-                           ``discretized_horizon`` - 1 (corresponding to day
-                           time
-                           24:00 - discretization interval length (in minutes).
-            household_model (HouseholdModel): A `PersonModel` representing one
-                          `ExpertPersona`.
-
-        Attr:
-            discretized_horizon (int): Horizon discretized by time unit
-                                       interval length.
-        """
-        self.discretized_horizon = horizon / interval_length
-        self.household_model = household_model
-
-
-class TransitionBuilder(AbstractTransitionBuilder):
-    def __init__(self, person_model, horizon, interval_length):
-        """An initial implementation of the ``AbstractTransitionBuilder``
-        """
-        super(TransitionBuilder, self).__init__(
-            person_model, horizon, interval_length)
 
     def get_transitions(self, state, person_model):
         """Compute the reachable next states characterizing the transition
@@ -290,12 +240,62 @@ class TransitionBuilder(AbstractTransitionBuilder):
                 next_mad = current_mad.astype(int)
             yield next_time_index, next_activity_symbol, next_mad
 
+    def get_node_type(self, state):
+        if state.symbol == self.home_activity_symbol:
+            if state.time_index == 0:
+                return 'home_start_state'
+            elif state.time_index == self.discretized_horizon:
+                return 'home_goal_state'
+        else:
+            return ''
+
+    def run(self):
+        """Returns a generator that populates an environments' states and
+        state graph.
+        """
+        state_id = 0
+        state_graph = StateGraph()
+        states = {}
+        state_rev_dict = {}
+        # Step backward through time from discretized_horizon to 0
+        for time_index in range(self.discretized_horizon, -1, -1):
+            for symbol, next_symbols in self._get_states(time_index):
+                for mad in get_mandatory_activities_done(
+                        self.person_model, time_index):
+                    # check prevents overwriting dict at
+                    # state_graph.g[time_index][symbol]
+                    # if symbol not in state_graph[time_index]:
+                    #     state_graph[time_index][symbol] = {}
+                    State = ActivityState if symbol in self.activity_symbols \
+                        else TravelState
+                    state = State(state_id, symbol, time_index, mad,
+                                  next_symbols)
+                    state_graph.add_node(state_id, state=state,
+                                         time_index=time_index, symbol=symbol,
+                                         mad=str(mad),
+                                         type=self.get_node_type(state))
+                    states[state_id] = state
+                    state_rev_dict[(time_index, symbol, str(mad))] = state_id
+                    state_id += 1
+                    for next_time_index, next_symbol, next_mad in \
+                            self.get_transitions(
+                                state, self.person_model):
+                        next_state = state_rev_dict[(
+                            next_time_index,
+                            next_symbol,
+                            str(next_mad))]
+                        state_graph.add_edge(state.state_id, next_state)
+        return states, state_graph
+
+
+########################################################################
+
 
 ########################################################################
 
 
 class AgentBuilder(object):
-    def __init__(self, config, person_model):
+    def __init__(self, config, person_model, person_id):
         """Builds an individual agent with MDP.
 
         Args:
@@ -303,6 +303,7 @@ class AgentBuilder(object):
             config (ATPConfig):  configuration parameters for agents.
 
         """
+        self.person_id = person_id
         self.person_model = person_model
         self.config = config
 
@@ -316,24 +317,25 @@ class AgentBuilder(object):
             env (ActivityEnv): Reference to environment.
 
         Returns:
-            mdp (ATPMDP): The fully built MDP
+            _mdp (ATPMDP): The fully built MDP
         """
         states, state_graph = self._build_states()
-        self._build_transitions(states, state_graph)
         actions = self._build_actions()
         env.add_states(states)
         env.update_G(state_graph)
         env.add_actions(actions)
         reward_function = ATPRewardFunction(self.config,
-                                            self.person_model, env)
-        transition_function = DeterministicTransition()
+                                            self.person_model,
+                                            self.person_id, env)
+        transition_function = DeterministicTransition(env)
         mdp = ATPMDP(self.person_model, reward_function,
                      transition_function,
                      actions, states,
-                     state_graph, self.config.irl_params.gamma)
+                     state_graph, self.config.irl_params.gamma,
+                     self.config.irl_params.horizon,
+                     self.config.profile_params.interval_length)
         env.transition_matrix = mdp.transition_matrix
-
-        return mdp
+        env.mdps[self.person_id] = mdp
 
     def _build_states(self):
         """Build an ActivityMDP according to the supplied PersonModel.
@@ -365,17 +367,6 @@ class AgentBuilder(object):
         for action_ix, el in enumerate(unique_symbols):
             actions[action_ix] = ATPAction(action_ix, el)
         return actions
-
-    def _build_transitions(self, states, state_graph):
-        transition_builder = TransitionBuilder(self.person_model,
-                                               self.config.irl_params.horizon,
-                                               self.config.profile_params.interval_length)
-        for state in states.values():
-            for next_time_index, next_activity, next_mad in \
-                    transition_builder.get_transitions(state,
-                                                       self.person_model):
-                state.next_states.append(state_graph[next_time_index][
-                                             next_activity][str(next_mad)])
 
 
 class AbstractEnvBuilder(six.with_metaclass(ABCMeta)):
@@ -438,13 +429,13 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
 
         # Build states for each individual in the household
         # (independently of each other):
-        self.env.mdps.append(agent_builder.build_mdp(self.env))
+        agent_builder.build_mdp(self.env)
 
     def finalize_env(self):
         """A few additional tasks to complete for the sake of convenience.
 
         This method assumes that the state graph has already been built for all
-        agents in the mdp.
+        agents in the _mdp.
         """
         # initialize environment action_space and state_space
         self.env.dim_A = len(self.env.actions)
@@ -458,10 +449,11 @@ class HouseholdEnvBuilder(AbstractEnvBuilder):
         self.env.home_activity = \
             self.household_model.home_activity_symbols[0]
         self.env.home_start_state = \
-            self.env.g[0][self.env.home_activity].values()[0]
-        self.env.home_goal_states.extend(
-            self.env.g[self.horizon / self.interval_length]
-            [self.env.home_activity].values())
+            self.env.states[self.env.g.filter_nodes_by_type(
+                'home_start_state')[0]]
+        self.env.home_goal_states.extend([
+            self.env.states[s] for s in self.env.g.filter_nodes_by_type(
+                'home_goal_state')])
         return self.env
 
 
@@ -471,7 +463,11 @@ if __name__ == '__main__':
     config_file = sys.argv[1]
     with open(config_file, 'r') as fp:
         config = ATPConfig(data=json.load(fp))
-    env_builder = HouseholdEnvBuilder(config)
+    env_builder = HouseholdEnvBuilder(
+        config.household_params.household_model, 15, 1440)
 
-    env = env_builder.add_agent()
+    env_builder.add_agent(AgentBuilder(
+        config, config.household_params.household_model.household_member_models[
+            0]))
+    env = env_builder.finalize_env()
     print('done')

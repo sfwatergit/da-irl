@@ -1,3 +1,7 @@
+from __future__ import (
+    absolute_import, division, print_function, unicode_literals
+)
+
 import collections
 import copy
 import functools
@@ -5,6 +9,8 @@ import os
 
 import numpy as np
 import tensorflow as tf
+
+from src.util.misc_utils import NCPU
 
 
 def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
@@ -284,8 +290,11 @@ def minimize_and_clip(optimizer, objective, var_list, clip_val=10):
 # ================================================================
 
 def get_session():
-    """Returns recently made Tensorflow session"""
-    return tf.get_default_session()
+    """Returns recently made Tensorflow session. If None, then creates one."""
+    if tf.get_default_session() is None:
+        return make_session(NCPU)
+    else:
+        return tf.get_default_session()
 
 
 def make_session(num_cpu):
@@ -307,7 +316,7 @@ ALREADY_INITIALIZED = set()
 def initialize():
     """Initialize all the uninitialized variables in the global scope."""
     new_variables = set(tf.global_variables()) - ALREADY_INITIALIZED
-    get_session().add_agent(tf.variables_initializer(new_variables))
+    get_session().run(tf.variables_initializer(new_variables))
     ALREADY_INITIALIZED.update(new_variables)
 
 
@@ -351,7 +360,8 @@ def save_state(fname):
 # ================================================================
 
 def normc_initializer(std=1.0):
-    def _initializer(shape):  # pylint: disable=W0613
+    def _initializer(shape, dtype=None,
+                     partition_info=None):  # pylint: # disable=W0613
         out = np.random.randn(*shape).astype(np.float32)
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
@@ -530,8 +540,8 @@ class _Function(object):
         # Update feed dict with givens.
         for inpt in self.givens:
             feed_dict[inpt] = feed_dict.get(inpt, self.givens[inpt])
-        results = get_session().add_agent(self.outputs_update,
-                                          feed_dict=feed_dict)[
+        results = get_session().run(self.outputs_update,
+                                    feed_dict=feed_dict)[
                   :-1]
         if self.check_nan:
             if any(np.isnan(r).any() for r in results):

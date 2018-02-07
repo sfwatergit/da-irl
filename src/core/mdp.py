@@ -283,15 +283,14 @@ class RewardFunction(six.with_metaclass(ABCMeta)):
                 (self._env.dim_S, self._env.dim_A, self.dim_phi),
                 dtype=np.float32)
             for state in list(self._env.states.values()):
-                action_ids = [self._env.reverse_action_map[next_state.symbol]
-                              for next_state in state.next_states]
+                action_ids = [self._env.reverse_action_map[
+                                  self._env.states[next_state].symbol]
+                              for next_state in self._env.G.successors(
+                        state.state_id)]
                 s = state.state_id
                 for a in action_ids:
-                    if s in self._env.terminals:
-                        self._feature_matrix[s, a] = np.zeros([self._dim_phi])
-                    else:
-                        self._feature_matrix[s, a] = self.phi(state,
-                                                              self._env.actions[
+                    self._feature_matrix[s, a] = self.phi(state,
+                                                          self._env.actions[
                                                                   a]).T
         return self._feature_matrix
 

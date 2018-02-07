@@ -1,4 +1,5 @@
 import os
+import os
 import platform
 
 import matplotlib
@@ -9,8 +10,8 @@ from src.core.mdp import RewardFunction
 from src.impl.activity_features import ActivityFeature, \
     create_act_at_x_features, TravelFeature
 from src.util.math_utils import get_subclass_list, cartesian, \
-    create_dir_if_not_exists, normalize
-from src.util.tf_utils import fc_net
+    create_dir_if_not_exists
+from src.util.tf_utils import fc_net, get_session
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
@@ -23,8 +24,11 @@ plt.interactive(False)
 
 
 class ATPRewardFunction(RewardFunction):
+    """
+    """
 
-    def __init__(self, config, person_model, env, rmax=1.0, opt_params=None,
+    def __init__(self, config, person_model, agent_id, env, rmax=1.0,
+                 opt_params=None,
                  nn_params=None, initial_theta=None):
         """Computes the activity reward based on the state which is the current
         activity and time of day.
@@ -38,10 +42,12 @@ class ATPRewardFunction(RewardFunction):
             nn_params (dict[str,obj]):
             initial_theta (nd.array):
         """
+        self.env = env
+        self.agent_id = agent_id
         self.config = config
         self.person_model = person_model
-        self.activity_features = self.make_activity_features(env)
-        self.trip_features = self.make_travel_features(env)
+        self.activity_features = self.make_activity_features()
+        self.trip_features = self.make_travel_features()
         self._make_indices()
 
         super(ATPRewardFunction, self).__init__(
@@ -54,6 +60,13 @@ class ATPRewardFunction(RewardFunction):
             self.scope = tf.get_variable_scope().name
 
     def _init(self, opt_params, nn_params, initial_theta):
+        """
+
+        Args:
+            opt_params:
+            nn_params:
+            initial_theta:
+        """
         if nn_params is None:
             nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
 
@@ -97,10 +110,11 @@ class ATPRewardFunction(RewardFunction):
         self.grad_norms = tf.global_norm(self.grad_theta)
         self.optimize = self.optimizer.apply_gradients(
             zip(self.grad_theta, self.theta))
-        self.sess = tf.Session()
+
+        self.sess = get_session()
         self.sess.run(tf.global_variables_initializer())
 
-    def make_travel_features(self, env):
+    def make_travel_features(self):
         """Make features for accessible trip modes for the agent.
         Args:
             env (src.impl.activity_env.ActivityEnv):
@@ -109,21 +123,22 @@ class ATPRewardFunction(RewardFunction):
 
         """
         return [i(mode, self.person_model,
-                  self.config.profile_params.interval_length, env=env) for i in
+                  self.config.profile_params.interval_length,
+                  self.agent_id, env=self.env) for i in
                 get_subclass_list(TravelFeature) for mode in
                 self.person_model.travel_models.keys()]
 
-    def make_activity_features(self, env):
+    def make_activity_features(self):
         """Make features for each important activity for the agent.
         """
         activity_features = [i(self.person_model,
                                self.config.profile_params.interval_length,
-                               env=env) for
+                               self.agent_id,
+                               env=self.env) for
                              i in get_subclass_list(ActivityFeature)]
 
-        acts = [self.person_model.home_activity,
-                self.person_model.work_activity,
-                self.person_model.other_activity]
+        acts = [activity[0] for activity in
+                self.person_model.activity_groups.values()]
 
         time_range = np.arange(0, self.config.irl_params.horizon,
                                self.config.profile_params.interval_length)
@@ -133,13 +148,17 @@ class ATPRewardFunction(RewardFunction):
         act_at_x_features = [
             create_act_at_x_features(where, when,
                                      self.config.profile_params.interval_length,
-                                     self.person_model)(env=env)
+                                     self.person_model, self.agent_id)(
+                env=self.env)
             for where, when in prod]
 
         activity_features += act_at_x_features
         return activity_features
 
     def _make_indices(self):
+        """
+
+        """
         assert (len(self.activity_features) > 0) and (
                 len(self.trip_features) > 0)
         self._activity_feature_ixs = range(len(self.activity_features))
@@ -148,9 +167,24 @@ class ATPRewardFunction(RewardFunction):
                                        len(self.trip_features))
 
     def __call__(self, state, action):
+        """
+
+        Args:
+            state:
+            action:
+        """
         self.phi(state, action)
 
     def phi(self, state, action):
+        """
+
+        Args:
+            state:
+            action:
+
+        Returns:
+
+        """
         phi = np.zeros((self._dim_phi, 1), float)
         feature_ixs = range(self._dim_phi)
         for ix in feature_ixs:
@@ -158,6 +192,14 @@ class ATPRewardFunction(RewardFunction):
         return phi
 
     def apply_grads(self, grad_r):
+        """
+
+        Args:
+            grad_r:
+
+        Returns:
+
+        """
         feat_map = self.feature_matrix
         grad_r = np.reshape(grad_r, [-1, 1])
         feat_map = np.reshape(feat_map, [-1, self.dim_phi])
@@ -167,57 +209,97 @@ class ATPRewardFunction(RewardFunction):
         return grad_theta, l2_loss, grad_norms
 
     def get_theta(self):
-        return normalize(self.sess.run(self.theta)[0])
+        """
+
+        Returns:
+
+        """
+        return self.sess.run(self.theta)[0]
 
     def get_trainable_variables(self):
+        """
+
+        Returns:
+
+        """
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
     def get_rewards(self):
+        """
+
+        Returns:
+
+        """
         feed_dict = {
             self.input_ph: self.feature_matrix.reshape([-1, self.dim_phi])}
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self._env.dim_S, self._env.dim_A])
 
     def plot_current_theta(self, ident):
+        from src.impl.activity_model import ActivityModel
+        """
+
+        Args:
+            ident:
+        """
         image_path = os.path.join(self.config.general_params.log_dir,
                                   os.path.join("expert_{}".format(ident)),
                                   self.config.general_params.images_dir)
         create_dir_if_not_exists(image_path)
-        home_int = [self.activity_features.index(feat) for feat in
-                    self.activity_features if feat.ident.startswith('h')]
-        work_int = [self.activity_features.index(feat) for feat in
-                    self.activity_features if feat.ident.startswith('w')]
-        other_int = [self.activity_features.index(feat) for feat in
-                     self.activity_features if
-                     feat.ident.startswith('o')]
-        plot_theta(self.get_theta(), home_int, work_int, other_int,
-                   self._env.interval_length, image_path, ident=ident)
+
+        for activity in self.person_model.activity_groups.values():
+            activity = activity[0]  # type: ActivityModel
+            activity_interval = []
+            for feature in self.activity_features:  # type: ActivityFeature
+                if feature.ident.startswith(activity.site_type):
+                    activity_interval.append(self.activity_features.index(
+                        feature))
+            plot_theta(self.get_theta(), activity_interval,
+                       name=' '.join(activity.site_type.split(
+                           '_')).capitalize(),
+                       disc_len=self._env.interval_length,
+                       image_path=image_path,
+                       ident=ident)
 
 
-def plot_theta(theta, home_int, work_int, other_int, disc_len, image_path,
-               show=False, ident=''):
-    home_feats = theta[home_int[
-                       :-1]]  # last home activity is anchor (creates
-    # negative utility)
-    work_feats = theta[work_int]
-    other_feats = theta[other_int]
-    plot_reward(home_feats, disc_len, image_path, 'home', 'b', show, ident)
+def plot_theta(theta, activity_interval, disc_len, name, image_path,
+               show=False, ident='', color='r'):
+    """
+
+    Args:
+        theta:
+        home_int:
+        work_int:
+        other_int:
+        disc_len:
+        image_path:
+        show:
+        ident:
+    """
+    feats = theta[activity_interval]
+    plot_reward(feats, disc_len, image_path, name, color, show, ident)
     plt.clf()
-    plot_reward(work_feats, disc_len, image_path, 'work', 'g', show, ident)
-    plt.clf()
-    plot_reward(other_feats, disc_len, image_path, 'other', 'r', show, ident)
-    plt.clf()
 
 
-def plot_reward(ys, disc_len=15., image_path='', title='', color='b',
+def plot_reward(ys, disc_len=15., image_path='', name='', color='b',
                 show=False, ident=''):
+    """
+
+    Args:
+        ys:
+        disc_len:
+        image_path:
+        name:
+        color:
+        show:
+        ident:
+    """
     xs = np.arange(0, len(ys)) * float(disc_len) / 60
     plt.plot(xs, ys, color)
-    plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(
-        title.capitalize()))
+    plt.title('Marginal Utility vs. Time of Day for {} Activity'.format(name))
     plt.xlabel('time (hr)')
     plt.ylabel('marginal utility (utils/hr)')
     if show:
         plt.show()
     else:
-        plt.savefig(image_path + '/{}_activity_persona_{}'.format(title, ident))
+        plt.savefig(image_path + '/{}_activity_persona_{}'.format(name, ident))

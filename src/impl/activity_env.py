@@ -31,7 +31,7 @@ class ActivityEnv(gym.Env):
         self.home_goal_states = []
         self.terminals = []
 
-        self.mdps = []
+        self.mdps = {}
 
         self.dim_A = None
         self.dim_S = None
@@ -42,7 +42,7 @@ class ActivityEnv(gym.Env):
 
         self._states = {}
 
-        self.g = {}
+        self.g = None
 
         self.__observation_space = None
 
@@ -82,7 +82,7 @@ class ActivityEnv(gym.Env):
         return self.g
 
     def update_G(self, state_graph):
-        self.g.update(state_graph)
+        self.g = state_graph
 
     @property
     def action_space(self):
@@ -93,8 +93,7 @@ class ActivityEnv(gym.Env):
     @property
     def observation_space(self):
         if self.__observation_space is None:
-            self.__observation_space = MultiDiscrete([[0, self.dim_A], [0,
-                                                                        self.dim_S]])
+            self.__observation_space = Discrete(self.dim_S)
         return self.__observation_space
 
     @property
@@ -142,6 +141,8 @@ class ActivityEnv(gym.Env):
         self.state = self.states[ns]
 
         r = self._reward(self.states[ns], action)
+        if r is None:
+            r = 0
 
         return ns, r, done, {}
 
@@ -151,7 +152,7 @@ class ActivityEnv(gym.Env):
         Returns: reward for state and action
 
         """
-        return self.reward_function(state.state_id, action.action_id)
+        return self.reward_function(state, action)
 
     def state_to_obs(self, state):
         if isinstance(state, int):

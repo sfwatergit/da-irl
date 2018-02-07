@@ -6,6 +6,8 @@ import six
 from src.util.math_utils import to_onehot
 from src.util.misc_utils import bag_by_type
 
+__all__ = ['ActivityModel', 'TravelModel', 'PersonModel', 'HouseholdModel']
+
 
 class TourElementModel(six.with_metaclass(ABCMeta)):
     def __init__(self, symbol, tour_element_data):

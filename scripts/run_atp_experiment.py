@@ -19,13 +19,17 @@ from itertools import izip
 
 import dateutil
 import matplotlib
+import numpy as np
+import pandas as pd
+from swlcommon import TraceLoader, Persona
 
 from src.impl.activity_config import ATPConfig
 from src.impl.env_builder import HouseholdEnvBuilder, AgentBuilder
+from src.impl.expert_persona import PersonaPathProcessorAlt
 from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
 from src.util.math_utils import create_dir_if_not_exists
-from src.util.misc_utils import set_global_seeds, get_trace_fnames
+from src.util.misc_utils import set_global_seeds
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
@@ -37,7 +41,22 @@ import matplotlib.pyplot as plt
 plt.interactive(False)
 
 
+def tp(groups, df):
+    idx = np.random.randint(0, len(groups))
+    group = groups.values()[idx]
+    uid_df = TraceLoader.load_traces_from_df(df.iloc[group])
+    return Persona(traces=uid_df, build_profile=True,
+                   config_file=config.general_params
+                   .profile_builder_config_file_path)
+
+
 def run(config, log_dir):
+    """
+
+    Args:
+        config:
+        log_dir:
+    """
     # std lib
     import logging
 
@@ -46,7 +65,6 @@ def run(config, log_dir):
     import tensorflow as tf
 
     # swl
-    from swlcommon import Persona, TraceLoader
 
     # da-irl
     from src.algos.maxent_irl import MaxEntIRL
@@ -62,12 +80,37 @@ def run(config, log_dir):
 
     env_builder = HouseholdEnvBuilder(
         config.household_params.household_model,
-        config.profile_params.interval_length,config.irl_params.horizon)
+        config.profile_params.interval_length, config.irl_params.horizon)
+    traces_path = config.traces_path
+    if traces_path.endswith('csv'):
+        df = pd.read_csv(traces_path)
+    elif traces_path.endswith('parquet'):
+        df = pd.read_parquet(config.irl_params.traces_file_path,
+                             engine="fastparquet")
+    else:
+        df = pd.read_csv('../data/traces/persona_1')
+        logger.log(
+            'No traces file found... assuming test and loading default persona')
 
-    trace_files = get_trace_fnames(config.traces_dir, 1)
+    groups = df.groupby('uid').groups
 
-    def make_expert(idx, trace_file):
+    def make_expert(idx, persona):
+        """
+
+        Args:
+            idx:
+            trace_file:
+
+        Returns:
+
+        """
+
         def _thunk():
+            """
+
+            Returns:
+
+            """
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
 
@@ -75,32 +118,33 @@ def run(config, log_dir):
             person_model = \
                 config.household_params.household_model.household_member_models[
                     0]
-            uid_df = TraceLoader.load_traces_from_csv(trace_file)
-            persona = Persona(traces=uid_df, build_profile=True,
-                              config_file=config.general_params
-                              .profile_builder_config_file_path)
-            agent_builder = AgentBuilder(config, person_model)
+
+            agent_builder = AgentBuilder(config, person_model, idx)
             env_builder.add_agent(agent_builder)
-            activity_env=env_builder.finalize_env()
-            mdp = activity_env.mdps[0]
+            activity_env = env_builder.finalize_env()
+            mdp = activity_env.mdps[idx]
             learning_algorithm = MaxEntIRL(mdp,
                                            int(config.irl_params.horizon /
                                                config.profile_params.interval_length))
             return ExpertPersonaAgent(config, person_model, mdp,
+                                      trajectory_procesessor=PersonaPathProcessorAlt(
+                                          mdp, person_model),
                                       learning_algorithm=learning_algorithm,
                                       persona=persona, pid=idx)
 
         return _thunk
 
+    personas = [tp(groups, df) for _ in range(config.num_experts)]
+
     expert_agent = SubProcVecExpAgent(
-        [make_expert(idx, trace_file) for idx, trace_file in
-         enumerate(trace_files)])
+        [make_expert(idx, persona) for idx, persona in enumerate(personas)])
 
     expert_agent.learn_reward()
 
     expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
                    izip(expert_agent.get_policy(), expert_agent.get_rewards(),
                         expert_agent.get_theta())]
+    expert_agent.close()
 
     plt.imshow(expert_data[0]['reward'][0], aspect='auto')
     plt.savefig(log_dir + '/reward')
@@ -121,21 +165,29 @@ if __name__ == '__main__':
     default_exp_name = '_%s_%s' % (timestamp, rand_id)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', help='Experiment configuration', type=str)
-    parser.add_argument('--traces_dir', help='Location of trace files',
+    parser.add_argument('--config', help='Experiment configuration',
                         type=str)
+    parser.add_argument('--traces_path', help='Location of trace files',
+                        type=str)
+    parser.add_argument('--num_experts', type=int, default=4,
+                        help='Number of experts in policy net')
     parser.add_argument(
         '--exp_name', type=str, default=default_exp_name,
         help='Name of the experiment.')
     parser.add_argument('--snapshot_mode', type=str, default='last',
-                        help='Mode to save the snapshot. Can be either "all" '
+                        help='Mode to save the snapshot. Can be either '
+                             '"all" '
                              '(all iterations will be saved), "last" (only '
-                             'the last iteration will be saved), "gap" (every'
-                             '`snapshot_gap` iterations are saved), or "none" '
+                             'the last iteration will be saved), "gap" ('
+                             'every'
+                             '`snapshot_gap` iterations are saved), '
+                             'or "none" '
                              '(do not save snapshots)')
-    parser.add_argument('--params_log_file', type=str, default='params.json',
+    parser.add_argument('--params_log_file', type=str,
+                        default='params.json',
                         help='Name of the parameter log file (in json).')
-    parser.add_argument('--tabular_log_file', type=str, default='progress.csv',
+    parser.add_argument('--tabular_log_file', type=str,
+                        default='progress.csv',
                         help='Name of the tabular log file (in csv).')
     parser.add_argument('--text_log_file', type=str, default='debug.log',
                         help='Name of the text log file (in pure text).')

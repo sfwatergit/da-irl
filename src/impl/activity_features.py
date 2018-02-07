@@ -11,21 +11,24 @@ from src.util.misc_utils import str_to_mins
 
 
 class TravelFeature(FeatureExtractor):
-    def __init__(self, name, size, person_model, interval_length, **kwargs):
+    def __init__(self, name, size, person_model,interval_length, agent_id,
+                 **kwargs):
         super(TravelFeature, self).__init__(name, size, **kwargs)
         self.person_model = person_model
         self.interval_length = interval_length
+        self.agent_id=agent_id
 
     def __call__(self, state, action):
         raise NotImplementedError("Must implement __call__")
 
 
 class TravelTimeDisutilityFeature(TravelFeature):
-    def __init__(self, mode, person_model, interval_length, **kwargs):
+    def __init__(self, mode, person_model, interval_length,agent_id, **kwargs):
         size = 1
         ident = mode
-        super(TravelTimeDisutilityFeature, self).__init__(mode, 1, person_model,
-                                                          interval_length,
+        super(TravelTimeDisutilityFeature, self).__init__(mode, 1,
+                                                          person_model,
+                                                          interval_length,agent_id,
                                                           **kwargs)
 
     def __call__(self, state, action):
@@ -34,8 +37,7 @@ class TravelTimeDisutilityFeature(TravelFeature):
         mode_params = self.person_model.travel_models[state.symbol]
         if state.symbol != self.ident:  # handle each mode separately
             return np.zeros(1)
-
-        next_state = self.env.mdps[self.person_model.agent_id].T(state,action)
+        next_state = self.env.mdps[self.agent_id].T(state,action)
         stays = True
         if isinstance(next_state, ActivityState):  # transitioning to activity
             stays = False
@@ -91,10 +93,12 @@ class ActivityFeature(FeatureExtractor):
     `TourElement`s.
     """
 
-    def __init__(self, name, size, person_model, interval_length, **kwargs):
+    def __init__(self, name, size, person_model,interval_length, agent_id,
+    **kwargs):
         super(ActivityFeature, self).__init__(name, size, **kwargs)
         self.interval_length = interval_length
         self.person_model = person_model
+        self.agent_id=agent_id
 
     def __call__(self, state, action):
         print(state, action)
@@ -178,11 +182,12 @@ class ActivityFeature(FeatureExtractor):
 #             return np.array([0])
 
 # class EndDayAtHomeFeature(ActivityFeature):
-#     def __init__(self, person_model, interval_length, **kwargs):
+#     def __init__(self, person_model, interval_length,agent_id,  **kwargs):
 #         size = 1
 #         ident = 'End day at home'
 #         super(EndDayAtHomeFeature, self).__init__(ident, size, person_model,
-#                                                   interval_length,
+#
+#                                                   interval_length, agent_id,
 #                                                   **kwargs)
 #
 #     def __call__(self, state, action):
@@ -190,14 +195,14 @@ class ActivityFeature(FeatureExtractor):
 #             return np.array([1])
 #         else:
 #             return np.array([0])
-#
+
 
 class EarlyArrivalFeature(ActivityFeature):
-    def __init__(self, person_model, interval_length, **kwargs):
+    def __init__(self, person_model,interval_length, agent_id,  **kwargs):
         size = 1
         ident = 'Early arrival'
         super(EarlyArrivalFeature, self).__init__(ident, size, person_model,
-                                                  interval_length,
+                                                  interval_length,agent_id,
                                                   **kwargs)
 
     def __call__(self, state, action):
@@ -206,8 +211,7 @@ class EarlyArrivalFeature(ActivityFeature):
                                        self.interval_length, (
                                                state.time_index + 1) * \
                                        self.interval_length
-        next_state = self.env.mdps[self.person_model.agent_id].T(state,
-                                                                 action)[0][1]
+        next_state = self.env.mdps[self.agent_id].T(state,action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):
@@ -230,15 +234,16 @@ class EarlyArrivalFeature(ActivityFeature):
 
 
 class LateArrivalFeature(ActivityFeature):
-    def __init__(self, person_model, interval_length, **kwargs):
+    def __init__(self, person_model, interval_length, agent_id, **kwargs):
         size = 1
         ident = 'Late arrival'
         super(LateArrivalFeature, self).__init__(ident, size, person_model,
-                                                 interval_length,
+
+                                                 interval_length, agent_id,
                                                  **kwargs)
 
     def __call__(self, state, action):
-        next_state = self.env.mdps[self.person_model.agent_id].T(state,
+        next_state = self.env.mdps[self.agent_id].T(state,
                                                                  action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
@@ -308,7 +313,8 @@ class LateArrivalFeature(ActivityFeature):
 #             return np.array([0])
 
 
-def create_act_at_x_features(where, when, interval_length, person_model):
+def create_act_at_x_features(where, when, interval_length,
+    person_model, agent_id):
     """
 
     Args:
@@ -328,7 +334,8 @@ def create_act_at_x_features(where, when, interval_length, person_model):
         self.start_period = self.when
         self.end_period = self.when + interval_length
         ActivityFeature.__init__(self, re.compile(r"(\w+\d)").findall(
-            str(type(self)))[0], 1, person_model, interval_length, **kwargs)
+            str(type(self)))[0], 1, person_model, interval_length, agent_id,
+        **kwargs)
 
     def __call__(self, state, action):
         if isinstance(state, TravelState):
