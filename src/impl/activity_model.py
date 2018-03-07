@@ -102,13 +102,14 @@ class PersonModel(object):
              activity_models.values()
              if activity_model.is_joint])
 
+        self.all_activity_symbols = [am.symbol for am in
+                                     list(self.activity_models.values())]
         self.activity_groups = bag_by_type(self.activity_models.values(),
                                            lambda x: x.site_type)
 
         self.home_activity = self.activity_groups['home'][0]
         self.work_activity = self.activity_groups['work'][0]
         self.other_activity = self.activity_groups['other'][0]
-        # self.mdp = ActivityMDP()
 
     def __str__(self):
         return "P-{}".format(self.agent_id)
@@ -143,3 +144,7 @@ class HouseholdModel(object):
                                       household_member_models.values()]
         self.other_activity_symbols = [member.other_activity.symbol for member
                                        in household_member_models.values()]
+
+        self.all_activity_symbols = self.home_activity_symbols + \
+                                    self.other_activity_symbols + \
+                                    self.work_activity_symbols

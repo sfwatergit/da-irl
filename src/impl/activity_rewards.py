@@ -1,118 +1,43 @@
 import os
 import os
 import platform
-
+import sys
 import matplotlib
 import numpy as np
-import tensorflow as tf
 
-from src.core.mdp import RewardFunction
+from src.core.mdp import TFRewardFunction
 from src.impl.activity_features import ActivityFeature, \
     create_act_at_x_features, TravelFeature
 from src.util.math_utils import get_subclass_list, cartesian, \
     create_dir_if_not_exists
-from src.util.tf_utils import fc_net, get_session
 
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
 else:
-    matplotlib.rcParams['backend'] = 'Agg'
+    matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 
 plt.interactive(False)
 
 
-class ATPRewardFunction(RewardFunction):
+class ATPRewardFunction(TFRewardFunction):
     """
     """
 
     def __init__(self, config, person_model, agent_id, env, rmax=1.0,
-                 opt_params=None,
-                 nn_params=None, initial_theta=None):
-        """Computes the activity reward based on the state which is the current
-        activity and time of day.
-
-        Initialized with config-defined scoring parameters.
-
-        Args:
-            config (ATPConfig): System configuration parameters.
-            rmax (float): Maximum value of the reward (not currently used)
-            opt_params (dict[str,obj]):
-            nn_params (dict[str,obj]):
-            initial_theta (nd.array):
-        """
-        self.env = env
-        self.agent_id = agent_id
+                 opt_params=None):
+        self.agent_id=agent_id
         self.config = config
         self.person_model = person_model
+        self.env = env
         self.activity_features = self.make_activity_features()
         self.trip_features = self.make_travel_features()
         self._make_indices()
-
-        super(ATPRewardFunction, self).__init__(
-            self.activity_features + self.trip_features, rmax=rmax,
-            initial_weights=initial_theta, env=env)
-
-        self.name = "reward_{}".format(person_model.agent_id)
-        with tf.variable_scope(self.name):
-            self._init(opt_params, nn_params, initial_theta)
-            self.scope = tf.get_variable_scope().name
-
-    def _init(self, opt_params, nn_params, initial_theta):
-        """
-
-        Args:
-            opt_params:
-            nn_params:
-            initial_theta:
-        """
-        if nn_params is None:
-            nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
-
-        if opt_params is None:
-            opt_params = {'lr': 0.3}
-
-        self.lr = opt_params['lr']
-
-        self.h_dim = nn_params['h_dim']
-        self.reg_dim = nn_params['reg_dim']
-
-        self.input_size = self.dim_phi
-
-        self.input_ph = tf.placeholder(tf.float32,
-                                       shape=[None, self.input_size],
-                                       name='dim_phi')
-
-        reward = fc_net(self.input_ph, n_layers=1, dim_hidden=self.h_dim,
-                        out_act=None,
-                        init=initial_theta, name=self.name)
-
-        self.theta = reward.graph.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES)
-
-        self.reward = reward
-
-        self.optimizer = tf.train.AdamOptimizer(self.lr)
-
-        self.grad_r = tf.placeholder(tf.float32, [None, 1])
-
-        self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
-        self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
-
-        self.grad_theta = tf.gradients(self.reward, self.theta, - self.grad_r)
-
-        self.grad_theta = [
-            tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i in
-            range(len(self.grad_l2))]
-        # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
-
-        self.grad_norms = tf.global_norm(self.grad_theta)
-        self.optimize = self.optimizer.apply_gradients(
-            zip(self.grad_theta, self.theta))
-
-        self.sess = get_session()
-        self.sess.run(tf.global_variables_initializer())
+        features = self.activity_features+self.trip_features
+        super(ATPRewardFunction, self).__init__(env, rmax,
+                                                opt_params, agent_id=agent_id,
+        features=features)
 
     def make_travel_features(self):
         """Make features for accessible trip modes for the agent.
@@ -144,96 +69,49 @@ class ATPRewardFunction(RewardFunction):
                                self.config.profile_params.interval_length)
 
         prod = cartesian([acts, time_range])
-
-        act_at_x_features = [
-            create_act_at_x_features(where, when,
-                                     self.config.profile_params.interval_length,
-                                     self.person_model, self.agent_id)(
-                env=self.env)
-            for where, when in prod]
-
-        activity_features += act_at_x_features
+        #
+        # act_at_x_features = [
+        #     create_act_at_x_features(where, when,
+        #                              self.config.profile_params.interval_length,
+        #                              self.person_model, self.agent_id)(
+        #         env=self.env)
+        #     for where, when in prod]
+        #
+        # activity_features += act_at_x_features
         return activity_features
 
-    def _make_indices(self):
-        """
+    @property
+    def feature_matrix(self):
+        """Compute the feature matrix, \Phi for each state and action pair
+        in the domain.
 
+        Returns:
+            nd.array[float]: |\mathcal{S}| X |\mathcal{A}| x |\phi| dimensioned
+                            matrix of features.
         """
+        if self._feature_matrix is None:
+            self._feature_matrix = np.zeros(
+                (self.env.dim_S, self.env.dim_A, self.dim_phi),
+                dtype=np.float32)
+            for state in list(self.env.states.values()):
+                action_ids = [self.env.reverse_action_map[
+                                  self.env.states[next_state].symbol]
+                              for next_state in self.env.G.successors(
+                        state.state_id)]
+                s = state.state_id
+                for a in action_ids:
+                    self._feature_matrix[s, a] = self.phi(state,
+                                                          self.env.actions[
+                                                              a]).T
+        return self._feature_matrix
+
+    def _make_indices(self):
         assert (len(self.activity_features) > 0) and (
                 len(self.trip_features) > 0)
         self._activity_feature_ixs = range(len(self.activity_features))
         self._trip_feature_ixs = range(len(self.activity_features),
                                        len(self.activity_features) +
                                        len(self.trip_features))
-
-    def __call__(self, state, action):
-        """
-
-        Args:
-            state:
-            action:
-        """
-        self.phi(state, action)
-
-    def phi(self, state, action):
-        """
-
-        Args:
-            state:
-            action:
-
-        Returns:
-
-        """
-        phi = np.zeros((self._dim_phi, 1), float)
-        feature_ixs = range(self._dim_phi)
-        for ix in feature_ixs:
-            phi[ix] = self.features[ix](state, action)
-        return phi
-
-    def apply_grads(self, grad_r):
-        """
-
-        Args:
-            grad_r:
-
-        Returns:
-
-        """
-        feat_map = self.feature_matrix
-        grad_r = np.reshape(grad_r, [-1, 1])
-        feat_map = np.reshape(feat_map, [-1, self.dim_phi])
-        _, grad_theta, l2_loss, grad_norms = self.sess.run(
-            [self.optimize, self.grad_theta, self.l2_loss, self.grad_norms],
-            feed_dict={self.grad_r: grad_r, self.input_ph: feat_map})
-        return grad_theta, l2_loss, grad_norms
-
-    def get_theta(self):
-        """
-
-        Returns:
-
-        """
-        return self.sess.run(self.theta)[0]
-
-    def get_trainable_variables(self):
-        """
-
-        Returns:
-
-        """
-        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
-
-    def get_rewards(self):
-        """
-
-        Returns:
-
-        """
-        feed_dict = {
-            self.input_ph: self.feature_matrix.reshape([-1, self.dim_phi])}
-        rewards = self.sess.run(self.reward, feed_dict)
-        return rewards.reshape([self._env.dim_S, self._env.dim_A])
 
     def plot_current_theta(self, ident):
         from src.impl.activity_model import ActivityModel
@@ -257,7 +135,7 @@ class ATPRewardFunction(RewardFunction):
             plot_theta(self.get_theta(), activity_interval,
                        name=' '.join(activity.site_type.split(
                            '_')).capitalize(),
-                       disc_len=self._env.interval_length,
+                       disc_len=self.env.interval_length,
                        image_path=image_path,
                        ident=ident)
 

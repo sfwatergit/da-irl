@@ -811,7 +811,7 @@ def _pad_row(cells, padding):
 
 
 def _format_table(fmt, headers, rows, colwidths, colaligns):
-    """Produce a plain-text representation of the table."""
+    """Produce a plain-text representations of the table."""
     lines = []
     hidden = fmt.with_header_hide if (headers and fmt.with_header_hide) else []
     pad = fmt.padding

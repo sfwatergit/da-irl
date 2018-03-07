@@ -4,7 +4,6 @@ from __future__ import (
 
 import gym
 import numpy as np
-from gym.spaces import MultiDiscrete
 from gym.spaces.discrete import Discrete
 
 from src.util.math_utils import to_onehot
@@ -16,7 +15,22 @@ class ActivityEnv(gym.Env):
         """Activity-Travel environment representing the planning domain with
         which activity-travel planning agent interact.
 
-        Agents observe
+        This environment (:py:class:`~gym.Env`) represents a daily
+        activity-travel pattern domain.
+
+        During episodes, agents take actions
+        (:py:class:`da-irl.src.impl.mdp.ATPAction) by calling the step method on
+        the current Env. Actions represent a choice of next activity or trip and
+        the time  to spend at the current activity). The agent then observes the
+        state (:py:class:`da-irl.src.impl.mdp.ATPState) of the environment
+        change in  response to its action as well as a reward immediately upon
+        registering his or her choice. That is,  the agent receives an update in
+        the form of next_state, reward.
+
+        Once the agent has reached its home state and no longer wishes to make
+        trips during the day, the agent then transitions to its home_goal_state,
+        an absorbing state in the Markov chain describing the daily activity
+        pattern.
 
         It is expected that the environment is initialized per a configurable
         ``EnvBuilder``. All non-derivative properties are defined per the
@@ -68,14 +82,6 @@ class ActivityEnv(gym.Env):
 
     def add_actions(self, actions):
         self._actions.update(actions)
-
-    @property
-    def horizon(self):
-        return self._horizon
-
-    @horizon.setter
-    def horizon(self, horizon):
-        self._horizon = horizon
 
     @property
     def G(self):
@@ -165,3 +171,7 @@ class ActivityEnv(gym.Env):
         for id, act in self.actions.items():
             if self.home_activity == act.next_state_symbol:
                 return id
+
+    def available_actions(self, state):
+        return [self.states[next_state].symbol for next_state in
+                self.G.successors(state.state_id)]

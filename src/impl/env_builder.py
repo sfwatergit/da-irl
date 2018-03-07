@@ -30,15 +30,16 @@ import json
 import sys
 from abc import ABCMeta, abstractmethod
 
+import numpy as np
 import six
 
+from core.mdp import LinearRewardFunction
 from src.core.state_graph import StateGraph
 from src.impl.activity_config import ATPConfig
 from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction, \
     ATPMDP, DeterministicTransition
-from src.impl.activity_model import PersonModel
-from src.impl.activity_rewards import ATPRewardFunction
+from src.impl.activity_model import PersonModel, HouseholdModel
 from src.util.mandatory_activity_utils import get_mandatory_activities_done, \
     maybe_increment_mad
 
@@ -130,12 +131,11 @@ class StateBuilder(AbstractStateBuilder):
                                            interval_length, person_model)
         self.work_activity_symbol = person_model.work_activity.symbol
         self.home_activity_symbol = person_model.home_activity.symbol
-        self.activity_symbols = person_model.activity_models.keys()
-        self.travel_mode_symbols = person_model.travel_models.keys()
+        self.activity_symbols = list(person_model.activity_models.keys())
+        self.travel_mode_symbols = list(person_model.travel_models.keys())
         self.all_symbols = self.activity_symbols + self.travel_mode_symbols
 
     def _get_possible_symbols(self, current_time_index):
-        # type: (int) -> list[str]
         """Computes, at any given timeslice, the state symbol indicators.
 
         Args:
@@ -324,9 +324,7 @@ class AgentBuilder(object):
         env.add_states(states)
         env.update_G(state_graph)
         env.add_actions(actions)
-        reward_function = ATPRewardFunction(self.config,
-                                            self.person_model,
-                                            self.person_id, env)
+        reward_function = LinearRewardFunction(np.array(5), domain=env)
         transition_function = DeterministicTransition(env)
         mdp = ATPMDP(self.person_model, reward_function,
                      transition_function,

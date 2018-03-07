@@ -71,7 +71,7 @@ class Message(object):
 
     def __enter__(self):
         global MESSAGE_DEPTH  # pylint: disable=W0603
-        print colorize('\t' * MESSAGE_DEPTH + '=: ' + self.msg, 'magenta')
+        print(colorize('\t' * MESSAGE_DEPTH + '=: ' + self.msg, 'magenta'))
         self.tstart = time.time()
         MESSAGE_DEPTH += 1
 
@@ -79,7 +79,8 @@ class Message(object):
         global MESSAGE_DEPTH  # pylint: disable=W0603
         MESSAGE_DEPTH -= 1
         maybe_exc = "" if etype is None else " (with exception)"
-        print colorize('\t' * MESSAGE_DEPTH + "done%s in %.3f seconds" % (maybe_exc, time.time() - self.tstart), 'magenta')
+        print(colorize('\t' * MESSAGE_DEPTH + "done%s in %.3f seconds" % (
+            maybe_exc, time.time() - self.tstart), 'magenta'))
 
 
 def prefix_log(prefix, logger=log):

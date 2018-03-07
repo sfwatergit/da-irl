@@ -141,8 +141,8 @@ def make_time_string(tidx, interval_length):
 def str_to_mins(time_str):
     if time_str == 'undefined':
         return -1  # default value
-    time_vals = map(int, time_str.split(':'))
-    return (time_vals[0] * 3600 + time_vals[1] * 60 + time_vals[2] * 60) / 60
+    time_vals = list(map(int, time_str.split(':')))
+    return (time_vals[0] * 3600 + time_vals[1] * 60 + time_vals[2]) / 60
 
 
 def reverse_action_map(actions):
@@ -156,3 +156,6 @@ def reverse_action_map(actions):
 
     """
     return dict((v.next_state_symbol, k) for k, v in actions.items())
+
+def flatten(arrays):
+    return [sub for arr in arrays for sub in arr]

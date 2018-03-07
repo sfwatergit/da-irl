@@ -22,7 +22,7 @@ class StateGraph(nx.DiGraph):
     def __init__(self, **attr):
         """ Generic state graph suited for MDPs
 
-        The state graph encapsulates a flexible representation for an MDP
+        The state graph encapsulates a flexible representations for an MDP
         which affords use of task specific constraints as well as temporally
         extended actions (in the sense of hierarchical reinforcement
         learning,options)

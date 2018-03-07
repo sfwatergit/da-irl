@@ -6,7 +6,7 @@ import os.path as osp
 from collections import defaultdict
 
 import numpy as np
-from swlcommon import TraceLoader
+from swlcommon import TraceLoader, SiteType
 from swlcommon.personatrainer.persona import Persona
 
 from src.core.expert_agent import ExpertAgent, AbstractPathProcessor
@@ -50,11 +50,11 @@ class ExpertPersonaAgent(ExpertAgent):
         else:
             self.persona = persona
 
+        self.persona_sites = PersonaSites(persona)
+
         identifier = self.persona.id if pid is None else pid
 
-        self._secondary_sites = self.persona.habitat.secondary_site_ids
-        self._work = self.persona.works[0]
-        self._home = self.persona.homes[0]
+        self.all_activities = person_model.all_activity_symbols
 
         path_matrix = np.array(
             self._filter_activity_patterns_not_starting_and_ending_at_home(
@@ -74,31 +74,16 @@ class ExpertPersonaAgent(ExpertAgent):
                                                  identifier)
 
     @property
+    def other_sites(self):
+        return self.persona_sites.other_sites
+
+    @property
     def home_site(self):
-        """
-
-        Returns:
-
-        """
-        return self._home
+        return self.persona_sites.home_site
 
     @property
     def work_site(self):
-        """
-
-        Returns:
-
-        """
-        return self._work
-
-    @property
-    def secondary_sites(self):
-        """
-
-        Returns:
-
-        """
-        return self._secondary_sites
+        return self.persona_sites.work_site
 
     def setup_learning(self):
         prefix = "pid: %s | " % self.identifier
@@ -140,6 +125,50 @@ class ExpertPersonaAgent(ExpertAgent):
                     trajectory[-1] == self.home_site.type.symbol):
                 res.append(trajectory)
         return res
+
+
+class PersonaSites:
+    def __init__(self, persona):
+        self.persona = persona
+        self._sites = self.persona.habitat.sites
+        self._other_sites = {}
+        self._work_site = self.persona.works[0]
+        self._home_site = self.persona.homes[0]
+
+    @property
+    def other_sites(self):
+        return self._other_sites
+
+    @property
+    def home_site(self):
+        return self._home_site
+
+    @property
+    def work_site(self):
+        return self._work_site
+
+    def _get_random_other_site_id(self):
+        site_id = np.random.choice(list(self._sites.keys()))
+        site = self._sites[site_id]
+        if site.type == SiteType.OTHER_SITE_TYPE:
+            return site_id
+        else:
+            return self._get_random_other_site_id()
+
+    def get_site_for_symbol(self, symbol):
+        if symbol.endswith('H'):
+            return self.home_site
+        elif symbol.endswith('W'):
+            return self.work_site
+        elif symbol.endswith('o'):
+            if '=>' in symbol:
+                key = symbol.partition('=>')[-1].lstrip(' ')
+            else:
+                key = symbol
+            if key not in self.other_sites:
+                other_site_id = self._get_random_other_site_id()
+                self.other_sites[key] = other_site_id
+            return self._sites[self.other_sites[key]]
 
 
 class PersonaPathProcessor(AbstractPathProcessor):
@@ -184,7 +213,7 @@ class PersonaPathProcessor(AbstractPathProcessor):
                         # We require travel between activities. Sometimes
                         # this isn't captured in the trace.
                         act_ix = self._mdp.reverse_action_map[
-                            self._person_model.travel_models.keys()[0]]
+                            list(self._person_model.travel_models.keys())[0]]
                 actions.append(act_ix)
                 states.append(state.state_id)
             trajectories.append(np.array(zip(states, actions)))

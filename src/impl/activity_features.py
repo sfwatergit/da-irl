@@ -3,7 +3,7 @@ from abc import abstractmethod
 
 import numpy as np
 
-from src import ATPConfig
+
 from src.core.mdp import FeatureExtractor
 from src.impl.activity_mdp import ActivityState, TravelState, ATPAction
 from src.impl.activity_model import PersonModel
@@ -181,20 +181,7 @@ class ActivityFeature(FeatureExtractor):
 #         else:
 #             return np.array([0])
 
-# class EndDayAtHomeFeature(ActivityFeature):
-#     def __init__(self, person_model, interval_length,agent_id,  **kwargs):
-#         size = 1
-#         ident = 'End day at home'
-#         super(EndDayAtHomeFeature, self).__init__(ident, size, person_model,
-#
-#                                                   interval_length, agent_id,
-#                                                   **kwargs)
-#
-#     def __call__(self, state, action):
-#         if state in self.env.home_goal_states:
-#             return np.array([1])
-#         else:
-#             return np.array([0])
+
 
 
 class EarlyArrivalFeature(ActivityFeature):
@@ -243,8 +230,7 @@ class LateArrivalFeature(ActivityFeature):
                                                  **kwargs)
 
     def __call__(self, state, action):
-        next_state = self.env.mdps[self.agent_id].T(state,
-                                                                 action)[0][1]
+        next_state = self.env.mdps[self.agent_id].T(state,action)[0][1]
         if isinstance(state, ActivityState):
             return np.array([0])
         if isinstance(state, TravelState):

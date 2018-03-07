@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
-
+from src.impl.activity_model import PersonModel
+from src.impl.activity_config import ATPConfig
 import six
 
 
@@ -14,7 +15,7 @@ class ExpertAgent(six.with_metaclass(ABCMeta)):
                  learning_algorithm,
                  trajectories,
                  identifier):
-        """PersonaAgent representation.
+        """PersonaAgent representations.
 
         Args:
             config (ATPConfig): General configuration parameters.
@@ -28,7 +29,7 @@ class ExpertAgent(six.with_metaclass(ABCMeta)):
         self._identifier = identifier
         self.config = config
         self.mdp = mdp
-        self._person_model = person_model
+        self.person_model = person_model
         self._learning_algorithm = learning_algorithm
         self._trajectories = trajectories
 

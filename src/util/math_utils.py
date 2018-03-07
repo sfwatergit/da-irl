@@ -3,7 +3,7 @@ from __future__ import (
 )
 
 import inspect
-from itertools import tee, izip
+from itertools import tee
 from os import path, makedirs
 
 import numpy as np
@@ -188,7 +188,7 @@ def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     now, nxt = tee(iterable)
     next(nxt, None)
-    return izip(now, nxt)
+    return zip(now, nxt)
 
 
 def adam(x, dx, config=None):

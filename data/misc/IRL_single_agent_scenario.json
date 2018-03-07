@@ -20,11 +20,11 @@
         "agent_id": 0,
         "activity_params": {
           "H": {
-            "closing_time": "undefined",
+            "closing_time": "24:00:00",
             "earliest_end_time": "undefined",
             "latest_start_time": "undefined",
             "minimal_duration": "08:00:00",
-            "opening_time": "undefined",
+            "opening_time": "00:00:00",
             "typical_duration": "12:00:00",
             "site_type": "home",
             "is_mandatory": false,
@@ -64,7 +64,7 @@
             "is_joint": false
           },
           "o": {
-            "closing_time": "undefined",
+            "closing_time": "24:00:00",
             "earliest_end_time": "undefined",
             "latest_start_time": "undefined",
             "minimal_duration": "undefined",

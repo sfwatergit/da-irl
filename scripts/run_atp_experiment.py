@@ -34,7 +34,7 @@ from src.util.misc_utils import set_global_seeds
 if platform.system() == 'Darwin':
     matplotlib.rcParams['backend'] = 'agg'
 else:
-    matplotlib.rcParams['backend'] = 'TkAgg'
+    matplotlib.rcParams['backend'] = 'Agg'
 
 import matplotlib.pyplot as plt
 
@@ -123,6 +123,7 @@ def run(config, log_dir):
             env_builder.add_agent(agent_builder)
             activity_env = env_builder.finalize_env()
             mdp = activity_env.mdps[idx]
+
             learning_algorithm = MaxEntIRL(mdp,
                                            int(config.irl_params.horizon /
                                                config.profile_params.interval_length))

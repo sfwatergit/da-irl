@@ -12,9 +12,9 @@ from .state_graph import StateGraph
 class ControllerGraph(object):
     """ A Controller Graph
 
-    A graph based representation of continuous state MDPs by sampling a few
+    A graph based representations of continuous state MDPs by sampling a few
     states and connecting them using local controllers (which can be seen as
-    Markov options). Generates a very sparse representation which is efficient
+    Markov options). Generates a very sparse representations which is efficient
     and also allows for task constraints to be modeled directly into the MDP
     action space via these local controllers.
 

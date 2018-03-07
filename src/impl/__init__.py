@@ -1,1 +1,1 @@
-from activity_config import ATPConfig
+from src.impl.activity_config import ATPConfig

@@ -27,8 +27,7 @@ def fc(x, n_output, scope="fc", activation_fn=None, initializer=None):
         else:
             W = tf.get_variable("W", initializer=initializer)
             b = tf.get_variable("b", shape=[n_output],
-                                initializer=tf.constant_initializer(0.0,
-                                                                    dtype=tf.float32))
+                                initializer=tf.constant_initializer(0.0))
         fc1 = tf.add(tf.matmul(x, W), b)
         if activation_fn is not None:
             fc1 = activation_fn(fc1)
@@ -213,7 +212,7 @@ class BatchInput(PlacholderTfInput):
         shape: [int]
             shape of a single elemenet of the batch
         dtype: tf.dtype
-            number representation used for tensor contents
+            number representations used for tensor contents
         name: str
             name of the underlying placeholder
         """
