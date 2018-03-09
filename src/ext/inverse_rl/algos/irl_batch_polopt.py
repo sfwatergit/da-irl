@@ -135,7 +135,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
 
     def log_avg_returns(self, paths):
         undiscounted_returns = [sum(path["rewards"]) for path in paths]
-        avg_return = np.mean(undiscounted_returns)
+        avg_return = np.nanmean(undiscounted_returns)
         return avg_return
 
     def get_irl_params(self):
@@ -166,9 +166,9 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         probs = self.irl_model.eval(paths, gamma=self.discount, itr=itr)
         probs = [np.mean(prob) for prob in probs]
 
-        logger.record_tabular('IRLRewardMean', np.mean(probs))
-        logger.record_tabular('IRLRewardMax', np.max(probs))
-        logger.record_tabular('IRLRewardMin', np.min(probs))
+        logger.record_tabular('IRLRewardMean', np.nanmean(probs))
+        logger.record_tabular('IRLRewardMax', np.nanmax(probs))
+        logger.record_tabular('IRLRewardMin', np.nanmin(probs))
 
         if self.irl_model.score_trajectories:
             # TODO: should I add to reward here or after advantage computation?
