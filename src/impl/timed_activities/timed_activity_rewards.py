@@ -1,16 +1,18 @@
 import numpy as np
 from vincenty import vincenty
 
-from core.mdp import FeatureExtractor
+from core.mdp import FeatureExtractor, TFRewardFunction
 from impl.activity_model import PersonModel
 from src.core.mdp import RewardFunction
 from src.impl.expert_persona import ExpertAgent
 from util.misc_utils import str_to_mins
 
 
-class TimedActivityRewards(RewardFunction):
+class TimedActivityRewards(TFRewardFunction):
 
-    def __init__(self, features, theta=None, rmax=1.0):
+    def __init__(self, features, states, actions, theta=None, rmax=1.0):
+        self._states = states
+        self._actions = actions
         self._theta = theta
         self._features = features
         self._feature_indices = range(len(self._features))
@@ -19,17 +21,8 @@ class TimedActivityRewards(RewardFunction):
         super().__init__(rmax=rmax, features=features)
 
     def __call__(self, state, action):
-        return self.theta.dot(self.phi(state, action))
 
-    def update_theta(self, theta):
-        """ Update the weights parameters of the reward function model """
-        self._theta = theta
 
-    @property
-    def theta(self):
-        if self._theta is None:
-            self._theta = np.random.random(self.dim_phi)
-        return self._theta
 
     @staticmethod
     def default_features(config, persona_sites):
@@ -52,6 +45,16 @@ class TimedActivityRewards(RewardFunction):
                                 ActivityDurationFeature('4 H', config),
                                 ActivityDurationFeature('4 o', config)
                                 ]])
+
+    @property
+    def feature_matrix(self):
+        dim_S, dim_A = len(self._states), len(self._actions)
+        feat_mat = np.zeros((dim_S, dim_A, self.dim_phi))
+        for state in self._states.values():
+            for action in self._actions.values():
+                feat_mat[state.state_id, action.action_id, :] = np.squeeze(
+                    self.phi(state, action))
+        return feat_mat
 
 
 class TravelDurationDisutilityFeature(FeatureExtractor):
@@ -122,8 +125,7 @@ class ActivityDurationFeature(FeatureExtractor):
         self.person_model = \
             list(
                 config.household_params.household_model
-                    .household_member_models.values())[
-                0]  # type: PersonModel
+                    .household_member_models.values())[0]  # type: PersonModel
         super(ActivityDurationFeature, self).__init__("{}: Duration".format(
             self.activity_type), 1)
 

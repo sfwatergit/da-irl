@@ -50,6 +50,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
             init_irl_params=None,
             train_irl=True,
             key='',
+            summary_dir=None,
             **kwargs
     ):
         """
@@ -101,6 +102,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         self.no_reward = zero_environment_reward
         self.discrim_train_itrs = discrim_train_itrs
         self.train_irl = train_irl
+        self.summary_dir = summary_dir
         self.__irl_params = None
 
         if self.irl_model_wt > 0:
@@ -141,7 +143,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
     def get_irl_params(self):
         return self.__irl_params
 
-    def compute_irl(self, paths, itr=0):
+    def compute_irl(self, paths, itr=0, writer=None, debug=False):
         if self.no_reward:
             tot_rew = 0
             for path in paths:
@@ -158,17 +160,18 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
             lr = 1e-4
             mean_loss = self.irl_model.fit(paths, policy=self.policy, itr=itr,
                                            max_itrs=max_itrs, lr=lr,
-                                           logger=logger)
-
+                                           logger=logger, debug=debug)
+            # writer.add_summary(self.irl_model.summary, itr)
             logger.record_tabular('IRLLoss', mean_loss)
             self.__irl_params = self.irl_model.get_params()
 
         probs = self.irl_model.eval(paths, gamma=self.discount, itr=itr)
-        probs = [np.mean(prob) for prob in probs]
 
-        logger.record_tabular('IRLRewardMean', np.nanmean(probs))
-        logger.record_tabular('IRLRewardMax', np.nanmax(probs))
-        logger.record_tabular('IRLRewardMin', np.nanmin(probs))
+        # Reshape so that individual components get credit
+        flat_probs = np.array([np.sum(prob[0]) for prob in probs])
+        logger.record_tabular('IRLRewardMean', np.nanmean(flat_probs))
+        logger.record_tabular('IRLRewardMax', np.nanmax(flat_probs))
+        logger.record_tabular('IRLRewardMin', np.nanmin(flat_probs))
 
         if self.irl_model.score_trajectories:
             # TODO: should I add to reward here or after advantage computation?
@@ -176,11 +179,13 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
                 path['rewards'][-1] += self.irl_model_wt * probs[i]
         else:
             for i, path in enumerate(paths):
-                path['rewards'] += self.irl_model_wt * probs[i]
+                for j,rew in enumerate(path['rewards']):
+                    path['rewards'][j] += self.irl_model_wt * probs[i][j]
         return paths
 
-    def train(self):
+    def train(self, debug=False):
         sess = tf.get_default_session()
+        writer = tf.summary.FileWriter(logger.get_snapshot_dir(), sess.graph)
         sess.run(tf.global_variables_initializer())
         if self.init_pol_params is not None:
             self.policy.set_param_values(self.init_pol_params)
@@ -197,7 +202,8 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
                 paths = self.obtain_samples(itr)
 
                 logger.log("Processing samples...")
-                paths = self.compute_irl(paths, itr=itr)
+                paths = self.compute_irl(paths, itr=itr, writer=writer,
+                                         debug=debug)
                 returns.append(self.log_avg_returns(paths))
                 samples_data = self.process_samples(itr, paths)
 
@@ -220,6 +226,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
                         input("Plotting evaluation run: Press Enter to "
                               "continue...")
         self.shutdown_worker()
+        writer.close()
         return
 
     def log_diagnostics(self, paths):

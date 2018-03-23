@@ -6,10 +6,10 @@ https://github.com/makokal/funzo/blob/master/funzo/models/mdp.py
 # Py3 Compat:
 from __future__ import (absolute_import, division,
                         print_function, unicode_literals)
-from builtins import *
 
 # Default
 from abc import abstractmethod, abstractproperty, ABCMeta
+from builtins import *
 from collections import Hashable
 from functools import reduce
 
@@ -319,7 +319,7 @@ class LinearRewardFunction(RewardFunction):
         """ Update the weights parameters of the reward function model """
         if 'reward' in kwargs:
             w = np.asarray(kwargs['reward'])
-            assert w.shape == self._weights.shape,\
+            assert w.shape == self._weights.shape, \
                 'New weight array size must match reward function dimension'
             self._weights = w
 
@@ -327,7 +327,6 @@ class LinearRewardFunction(RewardFunction):
     def kind(self):
         """ Type of reward function (e.g. tabular, LFA) """
         return 'LFA'
-
 
     def phi(self, state, action):
         """ Evaluate the reward features for state-action pair """
@@ -344,9 +343,10 @@ class LinearRewardFunction(RewardFunction):
                     dim += 1
         return dim
 
+
 class TFRewardFunction(RewardFunction):
 
-    def __init__(self, env, rmax=1.0,
+    def __init__(self, env=None, rmax=1.0,
                  opt_params=None,
                  agent_id=None,
                  nn_params=None, initial_theta=None, features=None):
@@ -389,7 +389,7 @@ class TFRewardFunction(RewardFunction):
                             out_act=None,
                             init=initial_theta, name=self.name)
 
-            self.theta = reward.graph.get_collection(
+            self._theta = reward.graph.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES)
 
             self.reward = reward
@@ -398,10 +398,10 @@ class TFRewardFunction(RewardFunction):
 
             self.grad_r = tf.placeholder(tf.float32, [None, 1])
 
-            self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
-            self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
+            self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self._theta])
+            self.grad_l2 = tf.gradients(self.l2_loss, self._theta)
 
-            self.grad_theta = tf.gradients(self.reward, self.theta,
+            self.grad_theta = tf.gradients(self.reward, self._theta,
                                            - self.grad_r)
 
             self.grad_theta = [
@@ -413,7 +413,7 @@ class TFRewardFunction(RewardFunction):
 
             self.grad_norms = tf.global_norm(self.grad_theta)
             self.optimize = self.optimizer.apply_gradients(
-                zip(self.grad_theta, self.theta))
+                zip(self.grad_theta, self._theta))
 
             self.sess = get_session()
             self.sess.run(tf.global_variables_initializer())
@@ -459,13 +459,14 @@ class TFRewardFunction(RewardFunction):
                                                           self.env.actions[a]).T
         return self._feature_matrix
 
-    def get_theta(self):
+    @property
+    def theta(self):
         """
 
         Returns:
 
         """
-        return self.sess.run(self.theta)[0]
+        return self.sess.run(self._theta)[0]
 
     def get_trainable_variables(self):
         """
@@ -485,18 +486,6 @@ class TFRewardFunction(RewardFunction):
             self.input_ph: self.feature_matrix.reshape([-1, self.dim_phi])}
         rewards = self.sess.run(self.reward, feed_dict)
         return rewards.reshape([self.env.dim_S, self.env.dim_A])
-
-    @abstractmethod
-    def make_activity_features(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def make_travel_features(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _make_indices(self):
-        raise NotImplementedError
 
 
 ########################################################################

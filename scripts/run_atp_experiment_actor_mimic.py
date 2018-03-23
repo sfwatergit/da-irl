@@ -146,7 +146,7 @@ def run(config, log_dir):
         nn_params.update({'name': '{}'.format(idx)})
         mdp = ATPMDP(
             ATPRewardFunction(activity_env, nn_params=nn_params,
-                              initial_theta=teacher.reward.get_theta()),
+                              initial_theta=teacher.reward.theta()),
             config.irl_params.gamma,
             activity_env)
         student = ExpertPersonaAgent(config, activity_env,
@@ -185,7 +185,7 @@ def run(config, log_dir):
         nn_params.update({'name': '{}'.format(idx)})
         mdp = ATPMDP(
             ATPRewardFunction(activity_env, nn_params=nn_params,
-                              initial_theta=teacher.reward.get_theta()),
+                              initial_theta=teacher.reward.theta()),
             config.irl_params.gamma,
             activity_env)
 

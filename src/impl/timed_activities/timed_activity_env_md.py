@@ -13,8 +13,7 @@ from rllab.misc import logger
 
 from impl.timed_activities.hazard_utils import create_hazard_df, \
     build_persona_dataset
-from impl.timed_activities.timed_activity_mdp import DurativeAction, \
-    DurativeState
+from impl.timed_activities.timed_activity_mdp import DurativeState
 from src.impl.timed_activities.timed_activity_mdp import TimedActivityMDP, \
     Representation
 
@@ -166,6 +165,7 @@ class TimedActivityEnv(Env):
         self._reward_function = reward_function
 
     def _reset(self):
+        self.current_step = 0
         self.state = self.home_start_state
         self.left_home = False
         return self.state_to_representation(self.state_id_map[self.state])
@@ -200,6 +200,7 @@ class TimedActivityEnv(Env):
             done = True
         else:
             done = False
+            self.current_step += 1
 
         self.state = next_state_id
         if finish_cond and p != 0:
@@ -247,74 +248,33 @@ class TimedActivityEnv(Env):
     def _seed(self):
         return 122
 
+def build_expert_patterns(experts, env):
+    """
 
-class ExpertPatternSampler:
-    def __init__(self, expert):
-        self.expert = expert
-        self.edf = pd.concat([create_hazard_df(
-            build_persona_dataset(self.expert)).reset_index()])
-        self.patterns = []
-        self.pat_counts = self._get_expert_pattern_counts()
-        self.pat_probs = self._get_expert_pattern_probs()
+    Args:
+        experts ():
+        env ():
 
-    def _get_expert_pattern_counts(self):
-        for idx, group in self.edf.groupby('date').groups.items():
-            dset = self.edf.iloc[group]
-            pat = "".join(dset.symbol.values.tolist())
-            self.patterns.append(pat)
-        pat_counts = Counter(self.patterns)
-        return pat_counts
-
-    def _get_expert_pattern_probs(self):
-        return np.asarray(list(self.pat_counts.values()), dtype=float) / sum(
-            self.pat_counts.values())
-
-    def sample_pattern(self):
-        return list(self.pat_counts.keys())[
-            np.random.choice(np.arange(len(self.pat_probs)), 1, replace=False,
-                             p=self.pat_probs).tolist()[0]]
-
-    def sample_df(self):
-        pattern = self.sample_pattern()
-        symbols = np.array([symbol for symbol in pattern])
-        next_acts = np.roll(symbols, -1).astype('S16')
-        prev_acts = np.roll(symbols, 1).astype('S16')
-        prev_acts[0] = 'F H'
-        prev_acts = prev_acts.astype(str)
-        next_acts[-1] = 'S H'
-        next_acts = next_acts.astype(str)
-        stypes = []
-        states = []
-        trip_num = 0
-        episodes = []
-        for symbol in pattern:
-            if symbol == '-':
-                stypes.append('travel')
-                trip_num += 1
-                states.append('Trip {}'.format(trip_num))
+    Returns:
+        dict:
+    """
+    eps = []
+    for path in experts:
+        states,actions = path['observations'],path['actions']
+        ep = []
+        for s in states[1:]:
+            state = env.representation_to_state(s)
+            sym = state.symbol
+            if '=>' in sym:
+                ep.append('-')
             else:
-                if trip_num == 0:
-                    prefix = 'S'
-                else:
-                    prefix = trip_num
-                stypes.append('activity')
-                states.append('{} {}'.format(prefix, symbol))
-            episodes.append('EP {}'.format(trip_num + 1))
-        states[-1] = 'F H'
-        sample_df = pd.DataFrame(
-            {'symbol': symbols, 'next_act': next_acts, 'prev_act': prev_acts,
-             'stype': stypes, 'state': states, 'episode': episodes})
-        sample_df['time'] = np.nan
-        sample_df['time_entry'] = np.nan
-        sample_df['duration_prev'] = np.nan
-        sample_df['duration_next'] = np.nan
-        sample_df['time_budget'] = np.nan
-        sample_df.loc[0, 'time'] = 0
-        sample_df.loc[0, 'time_entry'] = 0
-        sample_df.loc[0, 'time_budget'] = 1440
-        sample_df.loc[0, 'duration_prev'] = 0
-        sample_df.loc[len(sample_df) - 1, 'time_budget'] = 0
-        return sample_df
+                ep.append(sym[-1])
+        eps.append(''.join(ep))
+    eps_counts = Counter(eps)
+    tot = sum(eps_counts.values())
+    exp_val_dict = {k:np.round((v/tot),3) for k,v in eps_counts.items()}
+    exp_val_dict = sorted(exp_val_dict.items(), key=lambda x: x[1], reverse=True)
+    return exp_val_dict
 
 
 class StateBuilder:
@@ -336,38 +296,28 @@ class StateBuilder:
             self.inc_state_index()
         return res
 
-class StackObservationWrapper(Wrapper):
-    """
-    This wrapper "stacks" `count` many consecutive observations together,
-    i.e. it concatenates them along a new dimension.
-    For time steps when not enough observations have already happened, the remaining
-    space in the observation if filled by repeating the initial state.
-    Currently only works for Box spaces.
-    """
-    def __init__(self, env, count, axis=0):
-        """
-        :param gym.Env env: The environment to wrap.
-        :param int count: Number of observations that should be stacked.
-        :param int axis: Axis along which to stack the values.
-        """
-        super(StackObservationWrapper, self).__init__(env)
-        self._observations = deque(maxlen=count)
-        self._axis = axis
-        low = [0,0,0]
-        high = [space.n for space in env.observation_space.spaces]
-        low = np.stack([low]*count, axis=axis)
-        high = np.stack([high]*count, axis=axis)
-        self.observation_space = spaces.Tuple(low, high)
 
-    def _step(self, action):
-        obs, rew, done, info = self.env.step(action)
-        self._observations.append(obs)
+class LimitDuration(object):
+  """End episodes after specified number of steps."""
 
-        return np.stack(self._observations, axis=self._axis), rew, done, info
+  def __init__(self, env, duration):
+    self._env = env
+    self._duration = duration
+    self._step = None
 
-    def _reset(self):
-        obs = self.env.reset()
-        for i in range(self._observations.maxlen):
-            self._observations.append(obs)
+  def __getattr__(self, name):
+    return getattr(self._env, name)
 
-        return np.stack(self._observations, axis=self._axis)
+  def step(self, action):
+    if self._step is None:
+      raise RuntimeError('Must reset environment.')
+    observ, reward, done, info = self._env.step(action)
+    self._step += 1
+    if self._step >= self._duration:
+      done = True
+      self._step = None
+    return observ, reward, done, info
+
+  def reset(self):
+    self._step = 0
+    return self._env.reset()

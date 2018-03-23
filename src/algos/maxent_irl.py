@@ -200,7 +200,7 @@ class MaxEntIRL(six.with_metaclass(ABCMeta, IRLAlgorithm,
         """
         return dict(epoch=epoch,
                     policy=self.policy,
-                    theta=self.reward.get_theta(),
+                    theta=self.reward.theta,
                     reward=self.reward.get_rewards())
 
     def _start_state_dist(self):

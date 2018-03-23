@@ -106,11 +106,15 @@ class TimedActivityTransition(TransitionFunction):
 
         next_is_done = not state.is_done
         if "=>" in state.symbol:  # traveling already
-            if '=>' in next_symbol:  # travel (should never happen)
-                return [(0, self.states['F H', 0][self.horizon])]
-            else:  # wants to arrive
+            if '=>' not in next_symbol:
+                # if state.symbol[-1] != next_symbol[-1]:
+                return [(0, self.states[('F H', 0)][self.horizon])]
+                # prefix = ""
+                # next_symbol = next_symbol[-1]
+                # trip = False
+            else:  # travel
                 # symbol is matching
-                if action.duration == 0 or state.symbol[-1] != next_symbol:
+                if state.symbol[-1] != next_symbol[-1] or action.duration==0:
                     return [(0, self.states[('F H', 0)][self.horizon])]
                 else:
                     prefix = ""

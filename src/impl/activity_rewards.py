@@ -132,7 +132,7 @@ class ATPRewardFunction(TFRewardFunction):
                 if feature.ident.startswith(activity.site_type):
                     activity_interval.append(self.activity_features.index(
                         feature))
-            plot_theta(self.get_theta(), activity_interval,
+            plot_theta(self.theta(), activity_interval,
                        name=' '.join(activity.site_type.split(
                            '_')).capitalize(),
                        disc_len=self.env.interval_length,

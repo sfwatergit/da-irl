@@ -4,6 +4,7 @@ import sys
 sys.path.append('/home/sfeygin/python/examples/rllab/')
 import numpy as np
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 
 from ext.inverse_rl.models.architectures import feedforward_energy, relu_net
 from ext.inverse_rl.models.tf_util import discounted_reduce_sum
@@ -170,6 +171,14 @@ class SingleTimestepIRL(ImitationLearning):
         return False
 
 
+def pad_tensor_n(xs, max_len, fill_value=0):
+    ret = np.full((len(xs), max_len) + xs[0].shape[1:], fill_value=fill_value,
+                  dtype=xs[0].dtype)
+    for idx, x in enumerate(xs):
+        ret[idx][:len(x)] = x
+    return ret
+
+
 class GAIL(TrajectoryIRL):
     """
     Generative adverserial imitation learning
@@ -179,169 +188,156 @@ class GAIL(TrajectoryIRL):
     """
 
     def __init__(self, env_spec, expert_trajs=None,
-                 discrim_arch=feedforward_energy,
-                 discrim_arch_args={},
-                 name='gail'):
+                 discrim_arch=feedforward_energy, discrim_arch_args={},
+                 name='gail', batch_size=32):
         super(GAIL, self).__init__()
         self.dO = env_spec.observation_space.flat_dim
         self.dU = env_spec.action_space.flat_dim
         self.env_spec = env_spec
-        self.expert_trajs = expert_trajs
+
+
+
+        self.expert_path_lengths = np.array([len(path['observations']) for \
+                                             path in
+                                             expert_trajs])
+        self.max_length = max(self.expert_path_lengths)
+
+        self.expert_obs = np.stack(pad_tensor_n(
+            [self.env_spec.observation_space.flatten_n(path["observations"])
+             for path in
+             expert_trajs], self.max_length))
+
+        self.expert_acts = np.stack(
+            pad_tensor_n(
+                [self.env_spec.action_space.flatten_n(path["actions"])
+                 for path in expert_trajs], self.max_length))
+
         self.scope = name
 
         # build energy model
-        with tf.variable_scope(self.scope, reuse=tf.AUTO_REUSE ) as vs:
+        with tf.variable_scope(self.scope) as vs:
             # Should be batch_size x T x dO/dU
-            self.expert_obs_t = tf.placeholder(tf.float32, [None, None,
-                                                            self.dO],
-                                               name='expert_obs')
+
             with tf.variable_scope("obfilter"):
                 self.obs_rms = RunningMeanStd(shape=self.dO)
 
-            expert_obs = (self.expert_obs_t - self.obs_rms.mean /
-                        self.obs_rms.std)
+            self.labels = tf.placeholder(tf.float32, [None, 1], name='labels')
+            self.obs_t = tf.placeholder(tf.float32, [None, None, self.dO],
+                                        name='obs_t')
+            self.act_t = tf.placeholder(tf.float32, [None, None, self.dU],
+                                        name='act_t')
+            self.lr = tf.placeholder(tf.float32, (), 'lr')
+            self.lengths_mask = tf.placeholder(tf.float32, [None, 1])
 
-            self.expert_act_t = tf.placeholder(tf.float32, [None, None,
-                                                            self.dU],
-                                               name='expert_act')
+            obs_act = tf.concat([self.obs_t, self.act_t], axis=2)
 
-            self.gen_obs_t = tf.placeholder(tf.float32, [None, None, self.dO],
-                                            name='gen_obs')
-            self.gen_act_t = tf.placeholder(tf.float32, [None, None, self.dU],
-                                            name='gen_act')
+            self.logits = tf.reshape(feedforward_energy(obs_act), [-1, 1],
+                                     name="logits")
 
-            with tf.variable_scope("obfilter"):
-                self.gen_obs_rms = RunningMeanStd(shape=self.dO)
+            self.logits *= self.lengths_mask
+            loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits,
+                                                           labels=self.labels,
+                                                           name="gail_loss_full")
+            loss = tf.reduce_sum(loss, 1)
+            loss /= tf.reduce_sum(self.lengths_mask)
 
-            gen_obs = (self.gen_obs_t - self.gen_obs_rms.mean /
-                        self.gen_obs_rms.std)
+            entropy = tf.reduce_mean(logit_bernoulli_entropy(self.logits))
 
+            entropy_loss = -0.0001 * entropy
 
-            self.lr = tf.placeholder(tf.float32, (), name='lr')
-
-            expert_obs_act = tf.concat([expert_obs,
-                                        self.expert_act_t], axis=2)
-
-            gen_obs_act = tf.concat([gen_obs, self.gen_act_t],
-                                    axis=2)
-
-            expert_logits = self.build_graph(expert_obs_act, True)
-            expert_mask = tf.sign(
-                tf.reduce_max(tf.abs(expert_logits), reduction_indices=1))
-            expert_logits *= expert_mask
-            generator_logits = self.build_graph(gen_obs_act, False)
-            generator_mask = tf.sign(
-                tf.reduce_max(tf.abs(generator_logits), reduction_indices=1))
-            generator_logits *= generator_mask
-            generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=generator_logits, labels=tf.zeros_like(generator_logits))
-            generator_loss = tf.reduce_mean(generator_loss)
-            expert_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=expert_logits, labels=tf.ones_like(expert_logits))
-            expert_loss = tf.reduce_mean(expert_loss)
-
-            logits = tf.concat([generator_logits, expert_logits], 0)
-            entropy = tf.reduce_mean(logit_bernoulli_entropy(logits))
-            entropy_loss = -0.001 * entropy
             generator_acc = tf.reduce_mean(
-                tf.to_float(tf.nn.sigmoid(generator_logits) < 0.5))
+                tf.to_float(tf.nn.sigmoid(self.logits) < 0.5))
             expert_acc = tf.reduce_mean(
-                tf.to_float(tf.nn.sigmoid(expert_logits) > 0.5))
+                tf.to_float(tf.nn.sigmoid(self.logits) > 0.5))
+            self.loss = tf.reduce_mean(
+                loss) + entropy_loss + generator_acc
 
-            self.predictions = -tf.log(1 - tf.nn.sigmoid(generator_logits) +
-                                       1e-8)
-
-            self.loss = generator_loss + expert_loss + generator_acc + \
-                        expert_acc + entropy + entropy_loss
+            self.predictions = -tf.log(1 - tf.nn.sigmoid(self.logits) + LOG_REG,
+                                       name="gail_preds")
             self.step = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(
                 self.loss)
             self._make_param_ops(vs)
 
-    def get_trainable_variables(self, vs):
-        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, vs)
+
+            self.merged = tf.summary.merge_all()
+
+    @property
+    def score_trajectories(self):
+        return False
 
 
-
-    def build_graph(self, _input, reuse=False):
-
-        hidden_size = 128
-        #  transition
-        p_h1 = tf.contrib.layers.fully_connected(_input, hidden_size,
-                                                 activation_fn=tf.nn.tanh)
-        p_h2 = tf.contrib.layers.fully_connected(p_h1, hidden_size,
-                                                 activation_fn=tf.nn.tanh)
-        output = tf.reshape(p_h2, [-1, hidden_size])
-        logits = tf.contrib.layers.fully_connected(output, 1,
-                                                   activation_fn=tf.identity)
-        return logits
-
-    def fit(self, paths, batch_size=32, max_itrs=100, **kwargs):
+    def fit(self, paths, batch_size=5, max_itrs=100, **kwargs):
+        debug = kwargs.get('debug', False)
         # obs, acts = self.extract_paths(paths)
-        gen_max_action_path_length = max([len(path['actions'])
-                                          for
-                                          path in
-                                          paths])
 
-        gen_max_obs_path_length = max([len(path["observations"]) for path in
-                                       paths])
+        gen_path_length = np.array([len(path["observations"]) for path in
+                                    paths])
 
-        expert_max_action_path_length = max([len(path['actions'])
-                                             for
-                                             path in
-                                             self.expert_trajs])
+        for i, path in enumerate(paths):
+            path['length'] = gen_path_length[i]
 
-        expert_max_obs_path_length = max([len(path["observations"]) for path in
-                                          self.expert_trajs])
+        obs = np.stack(pad_tensor_n([path["observations"]
+                                     for path in
+                                     paths],
+                                    self.max_length))
 
-        max_obs_path_length = max(gen_max_obs_path_length,
-                                  expert_max_obs_path_length)
-        max_action_path_length = max(gen_max_action_path_length,
-                                     expert_max_action_path_length)
-
-        obs = np.stack(tensor_utils.pad_tensor_n([path["observations"]
-                                          for path in
-                                          paths],
-                                         max_obs_path_length))
-
-        acts = np.stack(tensor_utils.pad_tensor_n([path["actions"]
-                                                   for path in
-                                                   paths],
-                                                  max_action_path_length))
-
-        expert_obs = np.stack(tensor_utils.pad_tensor_n(
-            [self.env_spec.observation_space.flatten_n(path["observations"])
-             for path in
-             self.expert_trajs], max_obs_path_length))
-
-        expert_acts = np.stack(
-tensor_utils.pad_tensor_n(
-            [self.env_spec.action_space.flatten_n(path["actions"])
-             for path in
-             self.expert_trajs],max_action_path_length))
+        acts = np.stack(pad_tensor_n([path["actions"]
+                                      for path in
+                                      paths],
+                                     self.max_length))
 
         # Train discriminator
         for it in TrainingIterator(max_itrs, heartbeat=5):
-            obs_batch, act_batch = self.sample_batch(obs, acts,
-                                                     batch_size=batch_size)
-            expert_obs_batch, expert_act_batch = self.sample_batch(expert_obs,
-                                                                   expert_acts,
-                                                                   batch_size=batch_size)
-            # obs_batch = np.concatenate([obs_batch, expert_obs_batch], axis=0)
-            # act_batch = np.concatenate([act_batch, expert_act_batch], axis=0)
+            obs_batch, act_batch, lengths_batch = self.sample_batch(obs, acts,
+                                                                    gen_path_length,
+                                                                    batch_size=batch_size)
 
-            loss, _ = tf.get_default_session().run([self.loss, self.step],
-                                                   feed_dict={
-                                                       self.expert_act_t:
-                                                           expert_act_batch,
-                                                       self.expert_obs_t:
-                                                           expert_obs_batch,
-                                                       self.gen_act_t:
-                                                           act_batch,
-                                                       self.gen_obs_t:
-                                                           obs_batch,
-                                                       self.lr: 1e-3
-                                                   })
+            expert_obs_batch, expert_act_batch, exp_lengths_batch = \
+                self.sample_batch(
+                    self.expert_obs, self.expert_acts, self.expert_path_lengths,
+                    batch_size=batch_size)
 
+            obs_batch = np.concatenate([obs_batch, expert_obs_batch], axis=0)
+            act_batch = np.concatenate([act_batch, expert_act_batch], axis=0)
+
+            labels = np.zeros((batch_size * 2 * obs_batch.shape[1], 1),
+                              dtype=np.float32)
+
+            labels[batch_size * obs_batch.shape[1]:] = 1.0
+
+            lengths_mask = []
+            for l in np.concatenate([lengths_batch, exp_lengths_batch]):
+                ep_mask = np.zeros(self.max_length)
+                ep_mask[:l] = 1
+                lengths_mask.append(ep_mask)
+            lengths_mask = np.array(lengths_mask).reshape([-1, 1])
+
+            # Begin TF code
+            sess = tf.get_default_session()
+
+            feed_dict = {
+                self.act_t:
+                    act_batch,
+                self.obs_t:
+                    obs_batch,
+                self.labels: labels,
+                self.lengths_mask: lengths_mask,
+                self.lr: 0.00005
+            }
+            if debug:
+                sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+            loss, _ = sess.run([self.loss, self.step],
+                               feed_dict=feed_dict)
+
+            # self.summary = tf.get_default_session().run(self.merged,
+            # feed_dict={
+            #     self.labels:labels,
+            #     self.act_t:
+            #         act_batch,
+            #     self.obs_t:
+            #         obs_batch,
+            #     self.lr: 1e-2
+            # })
             it.record('loss', loss)
             if it.heartbeat:
                 print(it.itr_message())
@@ -359,54 +355,45 @@ tensor_utils.pad_tensor_n(
             idx += l
         return unpacked
 
-    @staticmethod
-    def pad_tensor_n(xs, max_len, obs=True):
-        ret = np.zeros((len(xs), max_len) + xs[0].shape[1:], dtype=xs[0].dtype)
-        if obs:
-            ret[:, :, 12], ret[:, :, 122], ret[:, :, 124] = 1.0, 1.0, 1.0
-        for idx, x in enumerate(xs):
-            ret[idx][:len(x)] = x
-        return ret
+
 
     def eval(self, paths, **kwargs):
         """
         Return bonus
 
         """
+        lengths = np.array([len(path['observations']) for path in paths])
+        obs = np.stack(pad_tensor_n([path["observations"]
+                                     for path in
+                                     paths],
+                                    self.max_length))
 
-        gen_max_action_path_length = max([len(path['actions'])
-                                          for
-                                          path in
-                                          paths])
-
-        gen_max_obs_path_length = max([len(path["observations"]) for path in
-                                       paths])
-
-        max_path_length = max(gen_max_action_path_length,
-                              gen_max_obs_path_length)
-
-        obs = np.stack(self.pad_tensor_n([path["observations"]
-                                          for path in
-                                          paths],
-                                         max_path_length))
-
-        acts = np.stack(tensor_utils.pad_tensor_n([path["actions"]
-                                                   for path in
-                                                   paths],
-                                                  max_path_length))
+        acts = np.stack(pad_tensor_n([path["actions"]
+                                      for path in
+                                      paths],
+                                     self.max_length))
         if len(obs.shape) == 2:
             obs = np.expand_dims(obs, 0)
         if len(acts.shape) == 2:
             acts = np.expand_dims(acts, 0)
 
+        lengths_mask = []
+        for l in lengths:
+            ep_mask = np.zeros(self.max_length)
+            ep_mask[:l] = 1
+            lengths_mask.append(ep_mask)
+        lengths_mask = np.array(lengths_mask).reshape([-1, 1])
+
         scores = tf.get_default_session().run(self.predictions,
                                               feed_dict={
-                                                  self.gen_obs_t: obs,
-                                                  self.gen_act_t: acts})
+                                                  self.obs_t: obs,
+                                                  self.act_t: acts,
+                                                  self.lengths_mask:
+                                                      lengths_mask})
 
         # reward = log D(s, a)
-        scores = np.log(scores[:, 0] + LOG_REG)
-        return scores
+        scores = scores[:, 0]
+        return scores.reshape(-1, self.max_length)
 
 
 class AIRL(SingleTimestepIRL):
@@ -841,10 +828,10 @@ class GAN_GCL(TrajectoryIRL):
             self._make_param_ops(vs)
 
     @staticmethod
-    def pad_tensor_n(xs, max_len, obs=True):
-        ret = np.zeros((len(xs), max_len) + xs[0].shape[1:], dtype=xs[0].dtype)
-        if obs:
-            ret[:, :, 12], ret[:, :, 122], ret[:, :, 124] = 1.0, 1.0, 1.0
+    def pad_tensor_n(xs, max_len, fill_value=0):
+        ret = np.full((len(xs), max_len) + xs[0].shape[1:],
+                      fill_value=fill_value,
+                      dtype=xs[0].dtype)
         for idx, x in enumerate(xs):
             ret[idx][:len(x)] = x
         return ret
@@ -974,6 +961,7 @@ class GAN_GCL(TrajectoryIRL):
         """
         Return bonus
         """
+        lengths = [len(path['observations']) for path in paths]
         max_path_length = max([len(path["observations"]) for path in
                                paths])
 
@@ -991,6 +979,7 @@ class GAN_GCL(TrajectoryIRL):
                                               feed_dict={self.act_t: acts,
                                                          self.obs_t: obs})
         scores = -scores[:, :, 0]
+        scores = [sum(r[range(l)]) for r, l in zip(scores, lengths)]
         return scores
 
     def eval_expert_probs(self, expert_paths, policy, insert=False):

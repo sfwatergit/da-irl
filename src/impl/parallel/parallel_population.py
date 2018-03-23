@@ -54,7 +54,7 @@ def worker(remote, parent_remote, exp_fn_wrapper):
             rewards = expert.reward_function.get_rewards()
             remote.send([rewards])
         elif cmd == 'get_theta':
-            theta = expert.reward_function.get_theta()
+            theta = expert.reward_function.theta()
             remote.send([theta])
         elif cmd == 'get_policy':
             policy = expert.policy
