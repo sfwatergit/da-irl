@@ -98,7 +98,7 @@ class TimedActivityTransition(TransitionFunction):
         next_time_key = current_time + duration
 
         if next_time_key > self.horizon:
-            return [(0, self.states[('F H', 1)][self.horizon])]
+            return [(0, self.states[('F H', 0)][self.horizon])]
 
         if state.symbol == 'F H' and state.is_done == 1:
             return [(1, self.states[('F H', 1)][self.horizon])]
@@ -114,7 +114,7 @@ class TimedActivityTransition(TransitionFunction):
                 # trip = False
             else:  # travel
                 # symbol is matching
-                if state.symbol[-1] != next_symbol[-1] or action.duration==0:
+                if state.symbol[-1] != next_symbol[-1] or action.duration == 0:
                     return [(0, self.states[('F H', 0)][self.horizon])]
                 else:
                     prefix = ""
@@ -131,14 +131,15 @@ class TimedActivityTransition(TransitionFunction):
                     else:
                         return [(0, self.states[('F H', 0)][self.horizon])]
                 else:
-                    return [(0, self.states[('F H', 0)][self.horizon])]
+                    return [(0, self.states[('F H', 1)][self.horizon])]
             else:  # wants to stay at activity
                 if state.is_done:
-                    if next_time_key == 1440 and 'H' in next_symbol and 'S' \
+                    if next_time_key ==self.horizon and 'H' in next_symbol and \
+                            'S' \
                             not in state.symbol and 'H' in state.symbol:  #
                         # can't
                         # stay if done
-                        return [(1, self.states[('F H', 1)][self.horizon])]
+                        return [(1, self.states[('F H', 0)][self.horizon])]
                     else:
                         return [(0, self.states[('F H', 0)][self.horizon])]
                 else:

@@ -2,6 +2,9 @@
 import argparse
 import sys
 
+from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
+from rllab.sampler.utils import rollout
+
 sys.path.append('../../da-irl')
 sys.path.append('../../da-irl/src')
 sys.path.append('../../common')
@@ -51,10 +54,9 @@ from sandbox.rocky.tf.q_functions.stochastic_discrete_mlp_q_function import \
 from sandbox.rocky.tf.envs.base import TfEnv
 from sandbox.rocky.tf.policies.categorical_mlp_policy import \
     CategoricalMLPPolicy
-from sandbox.rocky.tf.policies.categorical_gru_policy import \
-    CategoricalGRUPolicy
+from sandbox.rocky.tf.policies.categorical_lstm_policy import \
+    CategoricalLSTMPolicy
 from sandbox.rocky.tf.baselines.q_baseline import QfunctionBaseline
-from sandbox.rocky.tf.core.network import MLP
 from sandbox.rocky.tf.optimizers.conjugate_gradient_optimizer import \
     ConjugateGradientOptimizer, FiniteDifferenceHvp
 
@@ -94,7 +96,9 @@ if __name__ == '__main__':
 
     experts = load_latest_experts(
         '/home/sfeygin/python/da-irl/notebooks/data/timed_env/', n=1)
-
+    timestep_limit = max(np.array([len(path['observations']) for \
+                                   path in
+                                   experts]))
     with open(config_file) as fp:
         config = ATPConfig(data=json.load(fp))
 
@@ -121,11 +125,14 @@ if __name__ == '__main__':
 
     timed_activity_mdp = TimedActivityMDP(states, actions, reward_function,
                                           0.95, config)
+
+    time_step_limit = timestep_limit
+
     gym.envs.register(
         id='dairl-v0',
         entry_point='src.impl.timed_activities.timed_activity_env_md'
                     ':TimedActivityEnv',
-        timestep_limit=12,
+        timestep_limit=time_step_limit,
         kwargs={'mdp': timed_activity_mdp}
     )
 
@@ -138,8 +145,9 @@ if __name__ == '__main__':
         rewards = []
         print("ns:{}".format(ns, r, d))
         states, actions = ep['observations'], ep['actions']
-        for state, action in zip(states, actions):
-            print("e_ns:{}, e_a:{}".format(env.representation_to_state(state),
+        for idx, action in enumerate(actions):
+            print("e_ns:{}, e_a:{}".format(env.representation_to_state(
+                states[idx]),
                                            env.action_id_map[action]))
             ns, r, d, _ = env.step(action)
             ns = env.representation_to_state(ns)
@@ -161,21 +169,11 @@ if __name__ == '__main__':
                           normalize_obs=False))
 
     if args.policy_ckpt_name is None:
-        prob_network = MLP('policy_mlp',
-                           input_shape=(
-                               env.observation_space.flat_dim,),
-                           output_dim=env.action_space.n,
-                           hidden_sizes=[128, 64, 64, 32],
-                           hidden_nonlinearity=tf.nn.leaky_relu,
-                           output_nonlinearity=tf.nn.softmax,
-                           batch_normalization=False,
-                           weight_normalization=True)
+
         # Pass this into Algo
         policy = CategoricalMLPPolicy(name='policy',
-                                      prob_network=prob_network,
                                       env_spec=env.spec,
-
-                                      # hidden_sizes=(32, 64, 128),
+                                      hidden_sizes=(32, 64, 256),
                                       #
                                       )
     else:
@@ -184,63 +182,47 @@ if __name__ == '__main__':
                 out = joblib.load('{}/itr_{}.pkl'.format(args.policy_ckpt_name,
                                                          args.policy_ckpt_itr))
                 policy = out['policy']
-
-    # policy = CategoricalGRUPolicy(name='policy', env_spec=env.spec,
-    #                               hidden_dim=16,
-    #                               feature_network=prob_network,
-    #                               state_include_action=False,
-    #                               hidden_nonlinearity=tf.nn.elu)
+                data = [rollout(env, policy) for _ in range(100)]
+    policy = CategoricalLSTMPolicy(name='policy', env_spec=env.spec,
+                                  hidden_dim=128,
+                                  # feature_network=prob_network,
+                                  state_include_action=False,
+                                  hidden_nonlinearity=tf.nn.leaky_relu)
 
     qf = StochasticDiscreteMLPQFunction(env_spec=env.spec)
     qf_baseline = QfunctionBaseline(env_spec=env.spec,
                                     policy=policy, qf=qf)
+
     es = EpsilonGreedyStrategy(env_spec=env.spec)
-    irl_model = GAIL(env_spec=env.spec, expert_trajs=experts,
+    irl_model = GAIL(env=env, expert_trajs=experts, max_length=time_step_limit,
                      name='gan_gcl')
-
-    # Baseline Init:
-    nonlinearity = tf.nn.leaky_relu
-    b_hspec = (32, 32)
-    baseline = BaselineMLP(name='mlp_baseline',
-                           output_dim=1,
-                           hidden_sizes=b_hspec,
-                           hidden_nonlinearity=nonlinearity,
-                           output_nonlinearity=None,
-                           input_shape=(
-                               (np.sum([component.n for component in
-                                        env.spec.observation_space.components]),)
-                           )
-                           )
-    baseline.initialize_optimizer()
-
-
 
     algo = IRLTRPO(
         env=env,
         policy=policy,
         irl_model=irl_model,
-        n_itr=200,
+        n_itr=1000,
         batch_size=3000,
-        max_path_length=35,
+        max_path_length=time_step_limit,
         discount=1.0,
         step_size=0.01,
-        store_paths=True,
+        store_paths=False,
         discrim_train_itrs=200,
         irl_model_wt=1.0,
-        entropy_weight=0.0,
+        entropy_weight=0.0000,
         fixed_horizon=True,
         # GAIL should not use entropy unless for exploration
         zero_environment_reward=True,
-        baseline=baseline,
-        # optimizer=ConjugateGradientOptimizer(
-        #     hvp_approach=FiniteDifferenceHvp(base_eps=1e-5)),
+        baseline=LinearFeatureBaseline(env.spec),
+        optimizer=ConjugateGradientOptimizer(
+            hvp_approach=FiniteDifferenceHvp(base_eps=1e-5)),
         summary_dir='data/timed_env/'
     )
 
     with rllab_logdir(algo=algo,
                       dirname='data/timed_env/{}'.format(
-                          default_exp_name), snapshot_mode='all',
-                      snapshot_gap='3'):
+                          default_exp_name), snapshot_mode='gap',
+                      snapshot_gap=20):
         with tf.Session() as sess:
             algo.train(args.debug)
             print("done!")

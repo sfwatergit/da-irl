@@ -369,10 +369,10 @@ class TFRewardFunction(RewardFunction):
             self.scope = tf.get_variable_scope().name
 
             if nn_params is None:
-                nn_params = {'h_dim': 32, 'reg_dim': 10, 'name': 'maxent_irl'}
+                nn_params = {'h_dim': 32, 'reg_dim': 5, 'name': 'maxent_irl'}
 
             if opt_params is None:
-                opt_params = {'lr': 0.3}
+                opt_params = {'lr': 0.1}
 
             self.lr = opt_params['lr']
 
@@ -408,8 +408,7 @@ class TFRewardFunction(RewardFunction):
                 tf.add(self.reg_dim * self.grad_l2[i], self.grad_theta[i]) for i
                 in
                 range(len(self.grad_l2))]
-            # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta,
-            # 100.0)
+            # self.grad_theta, _ = tf.clip_by_global_norm(self.grad_theta, 100.0)
 
             self.grad_norms = tf.global_norm(self.grad_theta)
             self.optimize = self.optimizer.apply_gradients(
@@ -458,6 +457,12 @@ class TFRewardFunction(RewardFunction):
                     self._feature_matrix[s, a] = self.phi(state,
                                                           self.env.actions[a]).T
         return self._feature_matrix
+
+    @feature_matrix.setter
+    def feature_matrix(self,fm):
+        if self._feature_matrix is None:
+            self._feature_matrix = fm
+
 
     @property
     def theta(self):

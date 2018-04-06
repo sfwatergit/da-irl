@@ -20,10 +20,6 @@ class TimedActivityRewards(TFRewardFunction):
 
         super().__init__(rmax=rmax, features=features)
 
-    def __call__(self, state, action):
-
-
-
     @staticmethod
     def default_features(config, persona_sites):
         return np.concatenate([[TravelDurationDisutilityFeature(config),
@@ -43,18 +39,20 @@ class TimedActivityRewards(TFRewardFunction):
                                 LateArrivalFeature('4 W', config),
                                 EarlyArrivalFeature('4 W', config),
                                 ActivityDurationFeature('4 H', config),
-                                ActivityDurationFeature('4 o', config)
-                                ]])
+                                ActivityDurationFeature('4 o', config)]])
 
-    @property
-    def feature_matrix(self):
-        dim_S, dim_A = len(self._states), len(self._actions)
-        feat_mat = np.zeros((dim_S, dim_A, self.dim_phi))
-        for state in self._states.values():
-            for action in self._actions.values():
-                feat_mat[state.state_id, action.action_id, :] = np.squeeze(
-                    self.phi(state, action))
-        return feat_mat
+
+    def get_rewards(self):
+        """
+
+        Returns:
+
+        """
+        feed_dict = {
+            self.input_ph: self.feature_matrix.reshape([-1, self.dim_phi])}
+        rewards = self.sess.run(self.reward, feed_dict)
+        return rewards.reshape([self.feature_matrix.shape[0],
+                                self.feature_matrix.shape[1]])
 
 
 class TravelDurationDisutilityFeature(FeatureExtractor):

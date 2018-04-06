@@ -48,7 +48,7 @@ def rnn_trajectory_energy(obs_act):
     """
     # for trajectories
     dimOU = int(obs_act.get_shape()[2])
-    cell = tf.contrib.rnn.LSTMCell(num_units=dimOU)
+    cell = tf.contrib.rnn.LSTMCell(num_units=128)
     cell_out = tf.contrib.rnn.OutputProjectionWrapper(cell, 1)
     outputs, hidden = tf.nn.dynamic_rnn(cell_out, obs_act, time_major=False, dtype=tf.float32)
     return outputs

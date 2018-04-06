@@ -820,7 +820,7 @@ def lengths_to_mask(lengths_b, max_length):
         max_length: maximum length to fill the mask
 
     Returns:
-        a boolean array of shape (batch_size, max_length)
+        a boolean array of shape (batch_size, timestep_limit)
         row[i] consists of True repeated lengths_b[i] times, followed by False
     """
     lengths_b = tf.convert_to_tensor(lengths_b)

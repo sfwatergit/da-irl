@@ -132,7 +132,6 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         return self.sampler.obtain_samples(itr)
 
     def process_samples(self, itr, paths):
-        # processed = self.sampler.process_samples(itr, paths)
         return self.sampler.process_samples(itr, paths)
 
     def log_avg_returns(self, paths):
@@ -158,14 +157,26 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         if self.train_irl:
             max_itrs = self.discrim_train_itrs
             lr = 1e-4
-            mean_loss = self.irl_model.fit(paths, policy=self.policy, itr=itr,
+            mean_loss = self.irl_model.fit(paths,
+                                                      policy=self.policy, itr=itr,
                                            max_itrs=max_itrs, lr=lr,
                                            logger=logger, debug=debug)
-            # writer.add_summary(self.irl_model.summary, itr)
+
+            # writer.add_summary(irl_fit_summary, itr)
             logger.record_tabular('IRLLoss', mean_loss)
             self.__irl_params = self.irl_model.get_params()
 
-        probs = self.irl_model.eval(paths, gamma=self.discount, itr=itr)
+        probs = self.irl_model.eval(paths,
+                                                     gamma=self.discount,
+                                             itr=itr)
+
+        # writer.add_summary(irl_pred_summary, itr)
+
+
+
+
+
+        # writer.flush()
 
         # Reshape so that individual components get credit
         flat_probs = np.array([np.sum(prob[0]) for prob in probs])

@@ -1,5 +1,7 @@
 import functools
 import sys
+from collections import Counter, defaultdict, namedtuple
+from pprint import pprint
 
 sys.path.append('/home/sfeygin/python/examples/rllab/')
 import numpy as np
@@ -11,12 +13,12 @@ from ext.inverse_rl.models.tf_util import discounted_reduce_sum
 from ext.inverse_rl.utils.general import TrainingIterator
 from ext.inverse_rl.utils.hyperparametrized import Hyperparametrized
 from ext.inverse_rl.utils.math_utils import gauss_log_pdf, categorical_log_pdf
-from baselines.common.mpi_running_mean_std import RunningMeanStd
 from sandbox.rocky.tf.misc import tensor_utils
 
 LOG_REG = 1e-8
 DIST_GAUSSIAN = 'gaussian'
 DIST_CATEGORICAL = 'categorical'
+ActivityStats = namedtuple('ActivityStats', ['mean', 'std'])
 
 
 def length(sequence):
@@ -187,20 +189,21 @@ class GAIL(TrajectoryIRL):
     This version consumes single timesteps.
     """
 
-    def __init__(self, env_spec, expert_trajs=None,
-                 discrim_arch=feedforward_energy, discrim_arch_args={},
+    def __init__(self, env, expert_trajs=None, max_length=None,
+                 discrim_arch=feedforward_energy,
+                 discrim_arch_args={},
                  name='gail', batch_size=32):
         super(GAIL, self).__init__()
-        self.dO = env_spec.observation_space.flat_dim
-        self.dU = env_spec.action_space.flat_dim
-        self.env_spec = env_spec
 
-
-
+        self.env = env.wrapped_env.wrapped_env.env.env
+        self.env_spec = env.spec
+        self.dO = self.env_spec.observation_space.flat_dim
+        self.dU = self.env_spec.action_space.flat_dim
+        self.dim_phi = self.env.mdp.reward_function.dim_phi
         self.expert_path_lengths = np.array([len(path['observations']) for \
                                              path in
                                              expert_trajs])
-        self.max_length = max(self.expert_path_lengths)
+        self.max_length = max_length
 
         self.expert_obs = np.stack(pad_tensor_n(
             [self.env_spec.observation_space.flatten_n(path["observations"])
@@ -217,9 +220,6 @@ class GAIL(TrajectoryIRL):
         # build energy model
         with tf.variable_scope(self.scope) as vs:
             # Should be batch_size x T x dO/dU
-
-            with tf.variable_scope("obfilter"):
-                self.obs_rms = RunningMeanStd(shape=self.dO)
 
             self.labels = tf.placeholder(tf.float32, [None, 1], name='labels')
             self.obs_t = tf.placeholder(tf.float32, [None, None, self.dO],
@@ -254,17 +254,65 @@ class GAIL(TrajectoryIRL):
 
             self.predictions = -tf.log(1 - tf.nn.sigmoid(self.logits) + LOG_REG,
                                        name="gail_preds")
-            self.step = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(
-                self.loss)
+            self.step = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=.5,
+                                               beta2=.9).minimize(self.loss)
             self._make_param_ops(vs)
 
-
             self.merged = tf.summary.merge_all()
+
+    def feature_map(self, obsact):
+        # Should be batch_size x T x dO+dU
+
+        Phis = []
+        maxlen = obsact.shape[1]
+        for observations, actions in zip(*np.split(obsact, [self.dO], 2)):
+            Phi = []
+            states, actions = [self.env.representation_to_state(obs) for obs in
+                               self.env_spec.observation_space.unflatten_n(
+                                   observations)], [
+                                  self.env.action_id_map[act] for act in
+                                  self.env_spec.action_space.unflatten_n(
+                                      actions)]
+            for state, action in zip(states, actions):
+                Phi.append([feature(state, action) for feature in
+                            self.env.mdp.reward_function.features])
+            Phi = pad_tensor_n(np.concatenate(Phi, 1), maxlen)
+            Phis.append(Phi)
+        return np.stack(Phis).astype(np.float32)
+
+    def compute_pattern_distribution(self, pred_data):
+        eps = []
+        for path in pred_data:
+            states, actions = path['observations'], path['actions']
+            eps.append(''.join(list(map(lambda x: '-' if '=>' in x else x[-1],
+                                        [self.env.representation_to_state(
+                                            s).symbol
+                                         for s in
+                                         self.env_spec.observation_space.unflatten_n(
+                                             states)]))))
+        eps_counts = Counter(eps)
+        tot = sum(eps_counts.values())
+        val_dict = {k: np.round((v / tot), 3) for k, v in eps_counts.items()}
+        val_dict = sorted(val_dict.items(), key=lambda x: x[1], reverse=True)
+        return val_dict
+
+    def compute_time_distribution(self, pred_data):
+        time_dict = defaultdict(list)
+        for path in pred_data:
+            states, actions = path['observations'], path['actions']
+            for idx, s in enumerate(
+                    self.env_spec.observation_space.unflatten_n(states)):
+                state = self.env.representation_to_state(s)
+                update = state.time_index / 60.
+                time_dict[idx].append(update)
+        pred_time_data = {}
+        for idx, data in time_dict.items():
+            pred_time_data[idx] = ActivityStats(np.mean(data), np.std(data))
+        return pred_time_data
 
     @property
     def score_trajectories(self):
         return False
-
 
     def fit(self, paths, batch_size=5, max_itrs=100, **kwargs):
         debug = kwargs.get('debug', False)
@@ -288,9 +336,9 @@ class GAIL(TrajectoryIRL):
 
         # Train discriminator
         for it in TrainingIterator(max_itrs, heartbeat=5):
-            obs_batch, act_batch, lengths_batch = self.sample_batch(obs, acts,
-                                                                    gen_path_length,
-                                                                    batch_size=batch_size)
+            obs_batch, act_batch, lengths_batch = \
+                self.sample_batch(obs, acts, gen_path_length,
+                                  batch_size=batch_size)
 
             expert_obs_batch, expert_act_batch, exp_lengths_batch = \
                 self.sample_batch(
@@ -322,27 +370,21 @@ class GAIL(TrajectoryIRL):
                     obs_batch,
                 self.labels: labels,
                 self.lengths_mask: lengths_mask,
-                self.lr: 0.00005
+                self.lr: 0.0001
             }
+
             if debug:
                 sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             loss, _ = sess.run([self.loss, self.step],
                                feed_dict=feed_dict)
 
-            # self.summary = tf.get_default_session().run(self.merged,
-            # feed_dict={
-            #     self.labels:labels,
-            #     self.act_t:
-            #         act_batch,
-            #     self.obs_t:
-            #         obs_batch,
-            #     self.lr: 1e-2
-            # })
             it.record('loss', loss)
             if it.heartbeat:
                 print(it.itr_message())
                 mean_loss = it.pop_mean('loss')
                 print('\tLoss:%f' % mean_loss)
+        # summary = sess.run(tf.summary.merge([tf.summary.scalar('mean_loss',
+        #                                                 mean_loss)]),{})
         return mean_loss
 
     @staticmethod
@@ -354,8 +396,6 @@ class GAIL(TrajectoryIRL):
             unpacked.append(data[idx:idx + l])
             idx += l
         return unpacked
-
-
 
     def eval(self, paths, **kwargs):
         """
@@ -383,13 +423,16 @@ class GAIL(TrajectoryIRL):
             ep_mask[:l] = 1
             lengths_mask.append(ep_mask)
         lengths_mask = np.array(lengths_mask).reshape([-1, 1])
+        feed_dict = {self.obs_t: obs,
+                     self.act_t: acts,
+                     self.lengths_mask: lengths_mask}
 
         scores = tf.get_default_session().run(self.predictions,
-                                              feed_dict={
-                                                  self.obs_t: obs,
-                                                  self.act_t: acts,
-                                                  self.lengths_mask:
-                                                      lengths_mask})
+                                              feed_dict=feed_dict)
+
+        pprint(self.compute_time_distribution(paths))
+        val_dict = self.compute_pattern_distribution(paths)
+        pprint(val_dict)
 
         # reward = log D(s, a)
         scores = scores[:, 0]

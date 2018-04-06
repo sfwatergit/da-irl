@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.contrib.layers as tcl
 import numpy as np
 
 REG_VARS = 'reg_vars'
@@ -24,8 +25,14 @@ def discounted_reduce_sum(X, discount, axis=-1):
 def assert_shape(tens, shape):
     assert tens.get_shape().is_compatible_with(shape)
 
+def leaky_relu(x, alpha=0.2):
+    return tf.maximum(tf.minimum(0.0, alpha * x), x)
+
+def leaky_relu_batch_norm(x, alpha=0.2):
+    return leaky_relu(tcl.batch_norm(x), alpha)
+
 def relu_layer(X, dout, name):
-    return tf.nn.relu(linear(X, dout, name))
+    return tf.nn.swish(linear(X, dout, name))
 
 def softplus_layer(X, dout, name):
     return tf.nn.softplus(linear(X, dout, name))
@@ -38,7 +45,6 @@ def length(sequence):
     length = tf.reduce_sum(used, reduction_indices=1)
     length = tf.cast(length, tf.int32)
     return length
-
 
 def minibatch(input, num_kernels=5, kernel_dim=3):
     x =  tf.contrib.layers.fully_connected(input, num_kernels*kernel_dim,

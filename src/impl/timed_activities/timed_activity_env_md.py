@@ -73,9 +73,9 @@ class TimedActivityEnv(Env):
         self.action_id_map = mdp.transition.action_id_map
 
         self.home_start_state = self._states[('S H', 0)][0].state_id
-        self.home_goal_states = np.concatenate(
-            [[s.state_id for s in self._states[('F H', 0)].values()],
-             [s.state_id for s in self._states[('F H', 1)].values()]])
+        self.home_goal_states = [s.state_id for s in self.state_id_map.values()
+                                 if s.time_index == self._horizon and ('H' in
+                                            s.symbol and '=>' not in s.symbol)]
         self.terminals = self.home_goal_states
 
         self.max_len = 12
@@ -179,7 +179,7 @@ class TimedActivityEnv(Env):
         Returns:
 
         """
-        wrong_action_reward = [-999.0]
+        wrong_action_reward = [-1.0]
 
         # if not self._check_valid_action(action):
         #     p, next_state = self.mdp.T(self.state, action)[0]
@@ -194,7 +194,7 @@ class TimedActivityEnv(Env):
         current_fs = self.state_id_map[self.state]
 
         fa = self.mdp.transition.action_id_map[action]
-        finish_cond = current_fs.state_id in self.home_goal_states
+        finish_cond = next_fs.state_id in self.home_goal_states
 
         if finish_cond or p == 0:
             done = True

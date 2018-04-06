@@ -103,7 +103,7 @@ class TestTimedActivityTransition(TestCase):
         # There should never be a done indicator for a travel state
 
         trip_2W1_state = self.get_state('Trip => 2 W', 30, 0).state_id
-        good_duration_good_activity = self.get_action('W',45).action_id
+        good_duration_good_activity = self.get_action('Trip => W',45).action_id
         p, next_state = test_trans(trip_2W1_state,
                                    good_duration_good_activity)[0]
         self.assertEqual(p,1)
@@ -111,38 +111,16 @@ class TestTimedActivityTransition(TestCase):
         self.assertEqual(next_state.time_index, 75)
 
         # The following are the unhappy path actions
-        good_duration_bad_activity = self.get_action('Trip => W', 75).action_id
+        bad_duration_good_activity = self.get_action('Trip => W', 0).action_id
+        good_duration_bad_activity = self.get_action('H', 30).action_id
+        bad_duration_bad_activity = self.get_action('Trip => H', 0).action_id
 
         self.assertWrongState(*test_trans(trip_2W1_state,
-                                          good_duration_bad_activity)[0])
-
-
-
-    def test_transition_trip_to_trip(self):
-        test_trans = self._mockTransition()
-
-        # If traveling and not done, should conclude trip if taking action
-        # with same trip type indicator and duration > 0:
-        trip_2W0_state = self.get_state('Trip => 2 W', 30, 0).state_id
-        good_duration_good_activity = self.get_action('Trip => W', 45).action_id
-        p, next_state = test_trans(trip_2W0_state,
-                                   good_duration_good_activity)[0]
-        self.assertEqual(p,1)
-        self.assertEqual(next_state.symbol, 'Trip => 2 W')
-        self.assertEqual(next_state.time_index, 75)  # should add duration to
-        #  current time.
-
-        # The following are the unhappy path actions
-        good_duration_bad_activity = self.get_action('H', 90).action_id
-        bad_duration_good_activity = self.get_action('Trip => W', 0).action_id
-        bad_duration_bad_activity = self.get_action('Trip => H', 15).action_id
-
-        self.assertWrongState(
-            *test_trans(trip_2W0_state, good_duration_bad_activity)[0])
-        self.assertWrongState(*test_trans(trip_2W0_state,
-                                          bad_duration_bad_activity)[0])
-        self.assertWrongState(*test_trans(trip_2W0_state,
                                           bad_duration_good_activity)[0])
+        self.assertWrongState(*test_trans(trip_2W1_state,
+                                          good_duration_bad_activity)[0])
+        self.assertWrongState(*test_trans(trip_2W1_state,
+                                          bad_duration_bad_activity)[0])
 
     def test_transition_between_activities(self):
         test_trans = self._mockTransition()
