@@ -24,7 +24,9 @@ class IRLNPO(IRLBatchPolopt):
         if optimizer is None:
             if optimizer_args is None:
                 optimizer_args = dict(name='lbfgs')
-            optimizer = PenaltyLbfgsOptimizer(**optimizer_args)
+            optimizer = PenaltyLbfgsOptimizer(**optimizer_args)[0]
+        else:
+            optimizer = optimizer
         self.optimizer = optimizer
         self.step_size = step_size
         self.pol_ent_wt = entropy_weight

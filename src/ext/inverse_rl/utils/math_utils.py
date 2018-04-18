@@ -50,3 +50,11 @@ def categorical_log_pdf(params, x, one_hot=True):
     probs = params[0]
     return np.log(np.max(probs * x, axis=1))
 
+def make_dur_hist(dur_coll,ts):
+    nums = []
+    for durs in dur_coll:
+        if len(durs) <= ts:
+            continue
+        else:
+            nums.append(durs[ts])
+    return nums

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from ext.inverse_rl.models.tf_util import relu_layer, linear
+from ext.inverse_rl.models.tf_util import relu_layer, linear, tanh_layer
 from impl.timed_activities.timed_activity_rewards import TimedActivityRewards
 
 
@@ -7,13 +7,13 @@ def make_relu_net(layers=2, dout=1, d_hidden=128):
     def relu_net(x, last_layer_bias=True):
         out = x
         for i in range(layers):
-            out = relu_layer(out, dout=d_hidden, name='l%d'%i)
+            out = tanh_layer(out, dout=d_hidden, name='l%d'%i)
         out = linear(out, dout=dout, name='lfinal', bias=last_layer_bias)
         return out
     return relu_net
 
 
-def relu_net(x, layers=2, dout=1, d_hidden=256):
+def relu_net(x, layers=2, dout=1, d_hidden=512):
     out = x
     for i in range(layers):
         out = relu_layer(out, dout=d_hidden, name='l%d'%i)
@@ -41,6 +41,8 @@ def feedforward_energy(obs_act, ff_arch=relu_net, dropout=True):
     outputs = tf.reshape(outputs, new_shape, name="ff_reshape_out")
     return outputs
 
+def lstm_cell(lstm_size):
+  return tf.contrib.rnn.BasicLSTMCell(lstm_size)
 
 def rnn_trajectory_energy(obs_act):
     """
@@ -48,7 +50,10 @@ def rnn_trajectory_energy(obs_act):
     """
     # for trajectories
     dimOU = int(obs_act.get_shape()[2])
-    cell = tf.contrib.rnn.LSTMCell(num_units=128)
+    number_of_layers = 2
+    cell = tf.contrib.rnn.MultiRNNCell(
+        [lstm_cell(128) for _ in range(number_of_layers)])
+
     cell_out = tf.contrib.rnn.OutputProjectionWrapper(cell, 1)
     outputs, hidden = tf.nn.dynamic_rnn(cell_out, obs_act, time_major=False, dtype=tf.float32)
     return outputs

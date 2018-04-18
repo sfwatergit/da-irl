@@ -8,7 +8,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 
-from ext.inverse_rl.models.architectures import feedforward_energy, relu_net
+from ext.inverse_rl.models.architectures import feedforward_energy, relu_net, \
+    rnn_trajectory_energy
 from ext.inverse_rl.models.tf_util import discounted_reduce_sum
 from ext.inverse_rl.utils.general import TrainingIterator
 from ext.inverse_rl.utils.hyperparametrized import Hyperparametrized
@@ -195,6 +196,8 @@ class GAIL(TrajectoryIRL):
                  name='gail', batch_size=32):
         super(GAIL, self).__init__()
 
+        self.name = name
+        self.expert_trajs = expert_trajs
         self.env = env.wrapped_env.wrapped_env.env.env
         self.env_spec = env.spec
         self.dO = self.env_spec.observation_space.flat_dim
@@ -215,50 +218,154 @@ class GAIL(TrajectoryIRL):
                 [self.env_spec.action_space.flatten_n(path["actions"])
                  for path in expert_trajs], self.max_length))
 
-        self.scope = name
+        self.scope = self.name
 
         # build energy model
         with tf.variable_scope(self.scope) as vs:
             # Should be batch_size x T x dO/dU
 
             self.labels = tf.placeholder(tf.float32, [None, 1], name='labels')
-            self.obs_t = tf.placeholder(tf.float32, [None, None, self.dO],
-                                        name='obs_t')
-            self.act_t = tf.placeholder(tf.float32, [None, None, self.dU],
-                                        name='act_t')
+            self.obs_t_disc = tf.placeholder(tf.float32, [None, None, self.dO],
+                                             name='obs_t_disc')
+            self.act_t_disc = tf.placeholder(tf.float32, [None, None, self.dU],
+                                             name='act_t_disc')
+
+            self.obs_t_gen = tf.placeholder(tf.float32, [None, None, self.dO],
+                                            name='obs_t_gen')
+            self.act_t_gen = tf.placeholder(tf.float32, [None, None, self.dU],
+                                            name='act_t_gen')
+
             self.lr = tf.placeholder(tf.float32, (), 'lr')
-            self.lengths_mask = tf.placeholder(tf.float32, [None, 1])
 
-            obs_act = tf.concat([self.obs_t, self.act_t], axis=2)
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr,
+                                                    beta1=.5,
+                                                    beta2=.9)
 
-            self.logits = tf.reshape(feedforward_energy(obs_act), [-1, 1],
-                                     name="logits")
+            self.gen_lengths_mask = tf.placeholder(tf.float32, [None, 1])
 
-            self.logits *= self.lengths_mask
-            loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits,
-                                                           labels=self.labels,
-                                                           name="gail_loss_full")
-            loss = tf.reduce_sum(loss, 1)
-            loss /= tf.reduce_sum(self.lengths_mask)
+            self.disc_lengths_mask = tf.placeholder(tf.float32, [None, 1])
 
-            entropy = tf.reduce_mean(logit_bernoulli_entropy(self.logits))
+            self.generator_logits = self.build_graph(self.obs_t_gen,
+                                                     self.act_t_gen,
+                                                     reuse=False) * \
+                                    self.gen_lengths_mask
+            self.disc_logits = self.build_graph(self.obs_t_disc,
+                                                self.act_t_disc,
+                                                reuse=True) * \
+                               self.disc_lengths_mask
+            self.generator_acc = tf.reduce_mean(
+                tf.to_float(tf.nn.sigmoid(self.generator_logits) < 0.5))
+            self.disc_acc = tf.reduce_mean(
+                tf.to_float(tf.nn.sigmoid(self.disc_logits) > 0.5))
+            #
+            generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=self.generator_logits, labels=-tf.ones_like(
+                    self.generator_logits))
+            generator_loss = tf.reduce_sum(generator_loss, 1)
+            generator_loss /= tf.reduce_sum(self.gen_lengths_mask)
 
-            entropy_loss = -0.0001 * entropy
 
-            generator_acc = tf.reduce_mean(
-                tf.to_float(tf.nn.sigmoid(self.logits) < 0.5))
-            expert_acc = tf.reduce_mean(
-                tf.to_float(tf.nn.sigmoid(self.logits) > 0.5))
-            self.loss = tf.reduce_mean(
-                loss) + entropy_loss + generator_acc
+            disc_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=self.disc_logits, labels=tf.ones_like(
+                    self.disc_logits))
+            disc_loss = tf.reduce_sum(disc_loss, 1)
+            disc_loss /= tf.reduce_sum(self.disc_lengths_mask)
 
-            self.predictions = -tf.log(1 - tf.nn.sigmoid(self.logits) + LOG_REG,
+            logits = tf.concat([self.generator_logits, self.disc_logits], 0)
+            entropy = tf.reduce_mean(logit_bernoulli_entropy(logits))
+
+
+            self.generator_loss = tf.reduce_mean(generator_loss)
+            self.disc_loss = tf.reduce_mean(disc_loss)
+            self.entropy_loss = -0.0000 * entropy
+            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                         scope=self.name)
+
+            # Possible clipping from WGAN
+            clip_ops = []
+            for var in var_list:
+                clip_bounds = [-.01, .01]
+                clip_ops.append(
+                    tf.assign(
+                        var,
+                        tf.clip_by_value(var, clip_bounds[0], clip_bounds[1])
+                    )
+                )
+            self.clip_disc_weights_op = tf.group(*clip_ops)
+            l2_penalty_weight = 0.0000
+
+            self.total_loss = self.entropy_loss + self.disc_loss + \
+                              self.generator_loss
+
+            if l2_penalty_weight > 0.0:
+                loss_l2 = tf.add_n([tf.nn.l2_loss(v) for v in var_list if
+                                    'gail' in v.name and not (
+                                                'Adam' in v.name)]) / float(
+                    len(var_list)) * l2_penalty_weight
+                self.l2_loss = loss_l2
+                self.total_loss += loss_l2
+
+            gradient_penalty_weight = 0.00
+            if gradient_penalty_weight > 0.0:
+                hidden_sizes = [32,32]
+                batch_size = tf.shape(self.obs_t_gen)[0]
+                num_experts = tf.cast(tf.count_nonzero(self.obs_t_disc), tf.int32)
+                smallest = batch_size
+
+                alpha = tf.random_uniform(
+                    shape=[smallest, 1],
+                    minval=0.,
+                    maxval=1.
+                )
+                ln = tf.reshape(self.obs_t_gen,[-1,1])
+                alpha_in = alpha * ln[-smallest:]
+                beta_in = ((1 - alpha) * ln[:smallest])
+                interpolates = alpha_in + beta_in
+                net2 = interpolates
+
+                for i, x in enumerate(hidden_sizes):
+                    net2 = tf.layers.dense(inputs=net2, units=x,
+                                           activation=tf.tanh,
+                                           kernel_initializer=tf.random_uniform_initializer(
+                                               -0.05, 0.05),
+                                           name="discriminator_h%d" % i)
+                net2 = tf.layers.dense(inputs=net2, units=1,
+                                       activation=None,
+                                       kernel_initializer=tf.random_uniform_initializer(
+                                           -0.05, 0.05),
+                                       name="discriminator_outlayer")
+
+                gradients = tf.gradients(net2, [interpolates])[0]
+                gradients = tf.clip_by_value(gradients, -10., 10.)
+                slopes = tf.sqrt(
+                    tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+                gradient_penalty = gradient_penalty_weight * tf.reduce_mean(
+                    (slopes - 1) ** 2)
+                self.total_loss += gradient_penalty
+
+            self.step = self.optimizer.minimize(self.total_loss)
+
+            self.predictions = -tf.log(1 - tf.nn.sigmoid(
+                self.generator_logits) +
+                                       LOG_REG,
                                        name="gail_preds")
-            self.step = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=.5,
-                                               beta2=.9).minimize(self.loss)
-            self._make_param_ops(vs)
 
-            self.merged = tf.summary.merge_all()
+        self._make_param_ops(vs)
+        self.summary = self.build_summaries()
+        self.merged = tf.summary.merge_all()
+
+
+
+    def build_graph(self, obs_ph, acs_ph, reuse=False):
+        with tf.variable_scope(self.name):
+            if reuse:
+                tf.get_variable_scope().reuse_variables()
+
+            _input = tf.concat([obs_ph, acs_ph],
+                               axis=2)  # concatenate the two input ->
+            # form a transition
+            logits = tf.reshape(feedforward_energy(_input),[-1,1])
+        return logits
 
     def feature_map(self, obsact):
         # Should be batch_size x T x dO+dU
@@ -310,6 +417,20 @@ class GAIL(TrajectoryIRL):
             pred_time_data[idx] = ActivityStats(np.mean(data), np.std(data))
         return pred_time_data
 
+    def build_summaries(self):
+        summaries = []
+        summaries += [tf.summary.scalar('{}/loss'.format(self.name),
+                                        self.total_loss)]
+        summaries += [tf.summary.scalar('{}/lr'.format(self.name), self.lr)]
+        summaries += [tf.summary.scalar('{}/entropy'.format(self.name),
+                                        self.entropy_loss)]
+        summaries += [tf.summary.scalar('{}/gen_acc'.format(self.name),
+                                        self.generator_acc)]
+        summaries += [tf.summary.scalar('{}/disc_acc'.format(self.name),
+                                        self.disc_acc)]
+        summary_op = tf.summary.merge(summaries)
+        return summary_op
+
     @property
     def score_trajectories(self):
         return False
@@ -345,37 +466,45 @@ class GAIL(TrajectoryIRL):
                     self.expert_obs, self.expert_acts, self.expert_path_lengths,
                     batch_size=batch_size)
 
-            obs_batch = np.concatenate([obs_batch, expert_obs_batch], axis=0)
-            act_batch = np.concatenate([act_batch, expert_act_batch], axis=0)
+            # obs_batch = np.concatenate([obs_batch, expert_obs_batch], axis=0)
+            # act_batch = np.concatenate([act_batch, expert_act_batch], axis=0)
 
-            labels = np.zeros((batch_size * 2 * obs_batch.shape[1], 1),
-                              dtype=np.float32)
+            # labels = np.zeros((batch_size * 2 * obs_batch.shape[1], 1),
+            #                   dtype=np.float32)
+            #
+            # labels[batch_size * obs_batch.shape[1]:] = 1.0
 
-            labels[batch_size * obs_batch.shape[1]:] = 1.0
-
-            lengths_mask = []
-            for l in np.concatenate([lengths_batch, exp_lengths_batch]):
+            disc_lengths_mask = []
+            for l in exp_lengths_batch:
                 ep_mask = np.zeros(self.max_length)
                 ep_mask[:l] = 1
-                lengths_mask.append(ep_mask)
-            lengths_mask = np.array(lengths_mask).reshape([-1, 1])
+                disc_lengths_mask.append(ep_mask)
+            disc_lengths_mask = np.array(disc_lengths_mask).reshape([-1, 1])
+            gen_lengths_mask = []
+            for l in lengths_batch:
+                ep_mask = np.zeros(self.max_length)
+                ep_mask[:l] = 1
+                gen_lengths_mask.append(ep_mask)
+            gen_lengths_mask = np.array(gen_lengths_mask).reshape([-1, 1])
+
 
             # Begin TF code
             sess = tf.get_default_session()
 
             feed_dict = {
-                self.act_t:
-                    act_batch,
-                self.obs_t:
-                    obs_batch,
-                self.labels: labels,
-                self.lengths_mask: lengths_mask,
-                self.lr: 0.0001
+                self.act_t_gen: act_batch,
+                self.obs_t_gen: obs_batch,
+                self.act_t_disc: expert_act_batch,
+                self.obs_t_disc: expert_obs_batch,
+                self.disc_lengths_mask: disc_lengths_mask,
+                self.gen_lengths_mask: gen_lengths_mask,
+                self.lr: 0.00001
             }
 
             if debug:
                 sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-            loss, _ = sess.run([self.loss, self.step],
+            loss, _ = sess.run([self.total_loss,
+                                self.step],
                                feed_dict=feed_dict)
 
             it.record('loss', loss)
@@ -385,7 +514,8 @@ class GAIL(TrajectoryIRL):
                 print('\tLoss:%f' % mean_loss)
         # summary = sess.run(tf.summary.merge([tf.summary.scalar('mean_loss',
         #                                                 mean_loss)]),{})
-        return mean_loss
+        summary = tf.get_default_session().run(self.summary, feed_dict)
+        return mean_loss, summary
 
     @staticmethod
     def unpack(data, paths):
@@ -423,12 +553,14 @@ class GAIL(TrajectoryIRL):
             ep_mask[:l] = 1
             lengths_mask.append(ep_mask)
         lengths_mask = np.array(lengths_mask).reshape([-1, 1])
-        feed_dict = {self.obs_t: obs,
-                     self.act_t: acts,
-                     self.lengths_mask: lengths_mask}
-
-        scores = tf.get_default_session().run(self.predictions,
-                                              feed_dict=feed_dict)
+        feed_dict = {self.obs_t_gen: obs,
+                     self.act_t_gen: acts,
+                     self.gen_lengths_mask: lengths_mask}
+        summary_op = tf.summary.histogram('{}/rew_dist'.format(self.name),
+                                          self.predictions)
+        scores, summary = tf.get_default_session().run([self.predictions,
+                                                        summary_op],
+                                                       feed_dict=feed_dict)
 
         pprint(self.compute_time_distribution(paths))
         val_dict = self.compute_pattern_distribution(paths)
@@ -436,7 +568,7 @@ class GAIL(TrajectoryIRL):
 
         # reward = log D(s, a)
         scores = scores[:, 0]
-        return scores.reshape(-1, self.max_length)
+        return scores.reshape(-1, self.max_length), summary
 
 
 class AIRL(SingleTimestepIRL):

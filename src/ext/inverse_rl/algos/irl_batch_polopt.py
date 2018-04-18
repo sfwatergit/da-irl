@@ -1,15 +1,21 @@
 import sys
 import time
+from collections import defaultdict
 
 import rllab.misc.logger as logger
 import rllab.plotter as plotter
+from baselines.common import Dataset
 from rllab.algos.base import RLAlgorithm
+from tqdm import tqdm
+
+from ext.inverse_rl.utils.math_utils import make_dur_hist
 
 sys.path.append('/home/sfeygin/python/examples/rllab')
 import tensorflow as tf
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
 from sandbox.rocky.tf.samplers.vectorized_sampler import VectorizedSampler
 import numpy as np
+import baselines.common.tf_util as U
 
 from ext.inverse_rl.utils.hyperparametrized import Hyperparametrized
 
@@ -157,24 +163,23 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         if self.train_irl:
             max_itrs = self.discrim_train_itrs
             lr = 1e-4
-            mean_loss = self.irl_model.fit(paths,
-                                                      policy=self.policy, itr=itr,
-                                           max_itrs=max_itrs, lr=lr,
-                                           logger=logger, debug=debug)
+            mean_loss, irl_fit_summary = self.irl_model.fit(paths,
+                                                            policy=self.policy,
+                                                            itr=itr,
+                                                            max_itrs=max_itrs,
+                                                            lr=lr,
+                                                            logger=logger,
+                                                            debug=debug)
 
-            # writer.add_summary(irl_fit_summary, itr)
+            writer.add_summary(irl_fit_summary, itr)
             logger.record_tabular('IRLLoss', mean_loss)
             self.__irl_params = self.irl_model.get_params()
 
-        probs = self.irl_model.eval(paths,
-                                                     gamma=self.discount,
-                                             itr=itr)
+        probs, irl_pred_summary = self.irl_model.eval(paths,
+                                                      gamma=self.discount,
+                                                      itr=itr)
 
-        # writer.add_summary(irl_pred_summary, itr)
-
-
-
-
+        writer.add_summary(irl_pred_summary, itr)
 
         # writer.flush()
 
@@ -190,14 +195,31 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
                 path['rewards'][-1] += self.irl_model_wt * probs[i]
         else:
             for i, path in enumerate(paths):
-                for j,rew in enumerate(path['rewards']):
+                for j, rew in enumerate(path['rewards']):
                     path['rewards'][j] += self.irl_model_wt * probs[i][j]
+
+        # writer.add_summary(self.summarize_duration_histograms(paths),itr)
+        writer.flush()
         return paths
+
+    def summarize_duration_histograms(self, paths):
+        durs = []
+        max_len = 0
+        for p in paths:
+            path = self.env.action_space.unflatten_n(p['actions'])
+            durs.append([self.env.wrapped_env.wrapped_env.env.env.action_id_map[
+                             a].duration
+                         for a in path])
+            if len(durs[-1]) > max_len:
+                max_len = len(durs[-1])
+
+
 
     def train(self, debug=False):
         sess = tf.get_default_session()
         writer = tf.summary.FileWriter(logger.get_snapshot_dir(), sess.graph)
         sess.run(tf.global_variables_initializer())
+        # self.behavioral_cloning()
         if self.init_pol_params is not None:
             self.policy.set_param_values(self.init_pol_params)
         if self.init_irl_params is not None:
@@ -265,3 +287,62 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
     def update_plot(self):
         if self.plot:
             plotter.update_plot(self.policy, self.max_path_length)
+
+    def behavioral_cloning(self):
+        policy = self.policy
+        experts = self.irl_model.expert_trajs
+
+        optim_batch_size = 12
+        dist = policy.distribution
+        is_recurrent = int(policy.recurrent)
+        obs_var = self.env.observation_space.new_tensor_variable(
+            'obs',
+            extra_dims=1 + is_recurrent
+        )
+        action_var = self.env.action_space.new_tensor_variable(
+            'action',
+            extra_dims=1 + is_recurrent
+        )
+        state_info_vars = {
+            k: tf.placeholder(tf.float32,
+                              shape=[None] * (1+is_recurrent) + list(shape),
+                              name=k)
+            for k, shape in policy.state_info_specs
+        }
+
+        dist_info_vars = policy.dist_info_sym(obs_var, state_info_vars)
+        lr = tf.placeholder(tf.float32, (), name='lr')
+        loss = tf.reduce_mean(
+            -dist.log_likelihood_sym(action_var, dist_info_vars))
+
+        step = tf.train.AdamOptimizer(learning_rate=lr,
+                                      beta1=.5,
+                                      beta2=.9).minimize(loss)
+        max_iters = 500
+        lr_step = 0.01
+        U.initialize()
+        d = defaultdict(list)
+        for i in range(len(experts)):
+            d['ac'].append(np.array(experts[i]['actions']))
+            d['ob'].append(np.vstack(experts[i]['observations']))
+        dataset = Dataset(dict(ac=np.hstack(d['ac']), ob=np.vstack(d['ob'])),
+                          deterministic=True, shuffle=True)
+        losses = []
+        for iter_so_far in tqdm(range(int(max_iters))):
+            data = dataset.next_batch(optim_batch_size)
+            if len(data['ac']) == 0:
+                dataset = Dataset(
+                    dict(ac=np.hstack(d['ac']), ob=np.vstack(d['ob'])),
+                    deterministic=True, shuffle=True)
+                data = dataset.next_batch(optim_batch_size)
+            acts = self.env.action_space.flatten_n(data['ac'].astype(int))
+            obs = self.env.spec.observation_space.flatten_n(data['ob']).astype(
+                int)
+            if is_recurrent:
+                acts, obs = [acts], [obs]
+            feed_in = {}
+            feed_in[obs_var] = obs
+            feed_in[action_var] = acts
+            feed_in[lr] = lr_step
+            _, old_loss = tf.get_default_session().run([step, loss], feed_in)
+            print(old_loss)

@@ -27,13 +27,12 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
                                      name='labels')  # target (expert) actions
         self.lr = tf.placeholder(tf.float32, (), name='lr')
 
-        logits = fc_net(self.obs_ph, n_layers=1, dim_hidden=32, dim_out=self.dim_A,
+        self.logits = fc_net(self.obs_ph, n_layers=1, dim_hidden=32,
+                         dim_out=self.dim_A,
                         act=tf.nn.elu, out_act=None)  # AMN net
 
-        # take softmax over logits for output layer
-        self.amn_policy_predictions = tf.nn.softmax(logits)
         self.loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits,
+            tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.logits,
                                                        labels=self.labels))
         self.step = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(
             self.loss)
@@ -42,7 +41,7 @@ class ATPActorMimicIRL(six.with_metaclass(ABCMeta, MaxEntIRL)):
         self.use_amn_policy = False
 
     def evaluate_amn_policy(self, obs):
-        return self.sess.run(self.amn_policy_predictions,
+        return self.sess.run(self.logits,
                              feed_dict={self.obs_ph: obs})[0]
 
     def train_amn(self):

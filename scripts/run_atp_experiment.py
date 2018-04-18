@@ -12,7 +12,6 @@ import ast
 import datetime
 import json
 import multiprocessing
-import os.path as osp
 import platform
 import uuid
 from itertools import izip
@@ -20,6 +19,7 @@ from itertools import izip
 import dateutil
 import matplotlib
 import numpy as np
+import os.path as osp
 import pandas as pd
 from swlcommon import TraceLoader, Persona
 

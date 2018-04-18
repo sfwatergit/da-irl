@@ -280,12 +280,12 @@ if __name__ == '__main__':
         mdp.reward_function.apply_grads(grad)
         theta = mdp.reward_function.theta
 
-        grad_sign = np.sign(theta - old_theta)
+        # grad_sign = np.sign(theta - old_theta)
         old_theta = theta
         theta_norm = np.max(np.abs(theta))
         theta_norms.append(theta_norm)
-        print(pprint(list(
-            zip(mdp.reward_function._features, list(zip(theta, grad_sign))))))
+        # print(pprint(list(
+        #     zip(mdp.reward_function._features, list(zip(theta, grad_sign))))))
         print(theta_norms)
         plt.plot(theta_norms)
         plt.savefig('thetas/theta_norm.png')

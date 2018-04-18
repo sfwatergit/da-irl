@@ -21,13 +21,13 @@ class PenaltyLbfgsOptimizer(Serializable):
     def __init__(
             self,
             name,
-            max_opt_itr=1,
+            max_opt_itr=20,
             initial_penalty=1.0,
             min_penalty=1e-2,
             max_penalty=1e6,
             increase_penalty_factor=2,
             decrease_penalty_factor=0.5,
-            max_penalty_itr=1,
+            max_penalty_itr=20,
             adapt_penalty=True):
         Serializable.quick_init(self, locals())
         self._name = name

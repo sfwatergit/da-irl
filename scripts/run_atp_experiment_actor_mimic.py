@@ -12,9 +12,7 @@ import datetime
 import json
 import logging
 import multiprocessing
-import os.path as osp
 import platform
-from itertools import izip
 
 import dateutil
 # third party
@@ -22,17 +20,18 @@ import gym
 import joblib
 import matplotlib
 import numpy as np
+import os.path as osp
 import pandas as pd
 import tensorflow as tf
 from swlcommon import TraceLoader, Persona
 
+from impl.env_builder import HouseholdEnvBuilder, AgentBuilder
 from src.algos.actor_mimic import ATPActorMimicIRL
 from src.algos.maxent_irl import MaxEntIRL
 from src.impl.activity_config import ATPConfig
-from src.impl.activity_env import ActivityEnv
 from src.impl.activity_mdp import ATPMDP
 from src.impl.activity_rewards import ATPRewardFunction
-from src.impl.expert_persona import ExpertPersonaAgent
+from src.impl.expert_persona import ExpertPersonaAgent, PersonaPathProcessorAlt
 from src.impl.parallel.parallel_population import SubProcVecExpAgent
 from src.misc import logger
 from src.util.math_utils import create_dir_if_not_exists
@@ -66,7 +65,12 @@ def run(config, log_dir):
                                inter_op_parallelism_threads=ncpu)
     tf_config.gpu_options.allow_growth = True  # pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
-    activity_env = ActivityEnv(config)
+
+    env_builder = HouseholdEnvBuilder(
+        config.household_params.household_model,
+        config.profile_params.interval_length, config.irl_params.horizon)
+
+    activity_env = env_builder.finalize_env()
     logger.log("\n====Loading Persona Data====\n", with_prefix=False,
                with_timestamp=False)
 
@@ -87,32 +91,45 @@ def run(config, log_dir):
         def _thunk():
             exp_dir = osp.join(log_dir, 'expert_%s' % idx)
             logger.set_snapshot_dir(exp_dir)
-            mdp = ATPMDP(ATPRewardFunction(activity_env),
-                         config.irl_params.gamma, activity_env)
-            learning_algorithm = MaxEntIRL(mdp)
-            return ExpertPersonaAgent(config, activity_env, learning_algorithm,
-                                      persona, idx)
+            # For single agent, use the first household member model.
+            person_model = \
+                config.household_params.household_model.household_member_models[
+                    0]
+
+            agent_builder = AgentBuilder(config, person_model, idx)
+            env_builder.add_agent(agent_builder)
+            activity_env = env_builder.finalize_env()
+            mdp = activity_env.mdps[idx]
+
+            learning_algorithm = MaxEntIRL(mdp,
+                                           int(config.irl_params.horizon /
+                                               config.profile_params.interval_length))
+            return ExpertPersonaAgent(config, person_model, mdp,
+                                      trajectory_procesessor=PersonaPathProcessorAlt(
+                                          mdp, person_model),
+                                      learning_algorithm=learning_algorithm,
+                                      persona=persona, pid=idx)
 
         return _thunk
 
     if config.resume_from is None:
         logger.log("\n====Training {} experts from scratch!====\n".format(
             config.num_experts), with_prefix=False,
-                   with_timestamp=False)
+            with_timestamp=False)
         personas = [tp(groups, df) for _ in range(config.num_experts)]
         expert_agent = SubProcVecExpAgent(
             [make_expert(idx, persona) for idx, persona in enumerate(personas)])
         expert_agent.learn_reward()
         expert_data = [{'policy': p, 'reward': r, 'theta': t} for p, r, t in
-                       izip(expert_agent.get_policy(),
-                            expert_agent.get_rewards(),
-                            expert_agent.get_theta())]
+                       zip(expert_agent.get_policy(),
+                           expert_agent.get_rewards(),
+                           expert_agent.get_theta())]
         expert_agent.close()
 
     else:
         logger.log("\n====Resuming from {} with {} experts!====\n".format(
             config.resume_from, config.num_experts),
-                   with_prefix=False, with_timestamp=False)
+            with_prefix=False, with_timestamp=False)
         expert_file_data = get_expert_fnames(config.resume_from,
                                              n=config.num_experts)
         expert_data = []
