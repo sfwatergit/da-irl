@@ -259,7 +259,7 @@ class GAIL(TrajectoryIRL):
                 tf.to_float(tf.nn.sigmoid(self.disc_logits) > 0.5))
             #
             generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=self.generator_logits, labels=-tf.ones_like(
+                logits=self.generator_logits, labels=tf.zeros_like(
                     self.generator_logits))
             generator_loss = tf.reduce_sum(generator_loss, 1)
             generator_loss /= tf.reduce_sum(self.gen_lengths_mask)
@@ -498,7 +498,7 @@ class GAIL(TrajectoryIRL):
                 self.obs_t_disc: expert_obs_batch,
                 self.disc_lengths_mask: disc_lengths_mask,
                 self.gen_lengths_mask: gen_lengths_mask,
-                self.lr: 0.00001
+                self.lr: 0.0001
             }
 
             if debug:
