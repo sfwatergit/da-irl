@@ -8,8 +8,6 @@ from baselines.common import Dataset
 from rllab.algos.base import RLAlgorithm
 from tqdm import tqdm
 
-from ext.inverse_rl.utils.math_utils import make_dur_hist
-
 sys.path.append('/home/sfeygin/python/examples/rllab')
 import tensorflow as tf
 from sandbox.rocky.tf.samplers.batch_sampler import BatchSampler
@@ -163,7 +161,8 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         if self.train_irl:
             max_itrs = self.discrim_train_itrs
             lr = 1e-4
-            mean_loss, irl_fit_summary = self.irl_model.fit(paths,
+            mean_loss, mean_latent_loss, irl_fit_summary = self.irl_model.fit(
+                paths,
                                                             policy=self.policy,
                                                             itr=itr,
                                                             max_itrs=max_itrs,
@@ -173,13 +172,10 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
 
             writer.add_summary(irl_fit_summary, itr)
             logger.record_tabular('IRLLoss', mean_loss)
+            logger.record_tabular('IRLMeanLatentLoss', mean_latent_loss)
             self.__irl_params = self.irl_model.get_params()
 
-        probs, irl_pred_summary = self.irl_model.eval(paths,
-                                                      gamma=self.discount,
-                                                      itr=itr)
-
-        writer.add_summary(irl_pred_summary, itr)
+        probs = self.irl_model.eval(paths, gamma=self.discount, itr=itr)
 
         # writer.flush()
 
@@ -212,8 +208,6 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
                          for a in path])
             if len(durs[-1]) > max_len:
                 max_len = len(durs[-1])
-
-
 
     def train(self, debug=False):
         sess = tf.get_default_session()
@@ -305,7 +299,7 @@ class IRLBatchPolopt(RLAlgorithm, metaclass=Hyperparametrized):
         )
         state_info_vars = {
             k: tf.placeholder(tf.float32,
-                              shape=[None] * (1+is_recurrent) + list(shape),
+                              shape=[None] * (1 + is_recurrent) + list(shape),
                               name=k)
             for k, shape in policy.state_info_specs
         }
