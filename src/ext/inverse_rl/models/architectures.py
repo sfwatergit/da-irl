@@ -13,7 +13,7 @@ def make_relu_net(layers=2, dout=1, d_hidden=128):
     return relu_net
 
 
-def relu_net(x, layers=2, dout=1, d_hidden=512):
+def relu_net(x, layers=2, dout=1, d_hidden=256):
     out = x
     for i in range(layers):
         out = relu_layer(out, dout=d_hidden, name='l%d'%i)

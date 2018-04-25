@@ -42,7 +42,7 @@ def leaky_relu_batch_norm(x, alpha=0.2):
 
 
 def relu_layer(X, dout, name):
-    return tf.nn.swish(linear(X, dout, name))
+    return tf.nn.leaky_relu(linear(X, dout, name))
 
 
 def softplus_layer(X, dout, name):

@@ -91,7 +91,7 @@ if __name__ == '__main__':
     with open('/home/sfeygin/python/da-irl/notebooks/actions.pkl', 'rb') as f:
         actions = pickle.load(f)
 
-    num_experts = 5
+    num_experts = 10
     experts = load_latest_experts(
         '/home/sfeygin/python/da-irl/notebooks/data/timed_env/', n=num_experts)
     latent_dim = num_experts
@@ -178,7 +178,8 @@ if __name__ == '__main__':
             else:
                 policy = CategoricalMLPPolicy(name='policy',
                                               env_spec=env.spec,
-                                              hidden_sizes=(64, 128, 512),
+                                              hidden_sizes=(
+                                                  64, 128, 216, 512),
                                               )
 
             discrim_arch = feedforward_energy
@@ -206,11 +207,11 @@ if __name__ == '__main__':
                 env=env,
                 policy=policy,
                 irl_model=irl_model,
-                n_itr=300,
+                n_itr=500,
                 batch_size=3000,
                 max_path_length=time_step_limit,
                 discount=discount,
-                step_size=0.01,
+                step_size=0.005,
                 store_paths=False,
                 discrim_train_itrs=200,
                 irl_model_wt=1.0,

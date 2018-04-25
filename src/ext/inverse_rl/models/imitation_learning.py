@@ -256,9 +256,12 @@ class GAIL(TrajectoryIRL):
                                              name='latent_gen')
 
             self.lr = tf.placeholder(tf.float32, (), 'lr')
-            self.latent_lr = tf.placeholder(tf.float32, (), 'lr')
+            self.latent_lr = tf.placeholder(tf.float32, (), 'latent_lr')
 
-            self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+            self.optimizer = tf.train.AdamOptimizer(
+                            learning_rate=self.lr,
+                            beta1=.5,
+                            beta2=.9)
 
             self.latent_optimizer = tf.train.AdamOptimizer(
                 learning_rate=self.latent_lr,
@@ -287,21 +290,21 @@ class GAIL(TrajectoryIRL):
             self.disc_acc = tf.reduce_mean(
                 tf.to_float(tf.nn.sigmoid(self.disc_logits) > 0.5))
             #
-            # generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-            #     logits=self.generator_logits, labels=-tf.ones_like(
-            #         self.generator_logits))
+            generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=self.generator_logits, labels=tf.zeros_like(
+                    self.generator_logits))
 
-            generator_loss = tf.reduce_sum(self.generator_logits, 1)
-            generator_loss /= tf.reduce_sum(self.gen_lengths_mask)
 
-            # disc_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-            #     logits=self.disc_logits, labels=tf.ones_like(
-            #         self.disc_logits))
-            disc_loss = tf.reduce_sum(self.disc_logits, 1)
-            disc_loss /= tf.reduce_sum(self.disc_lengths_mask)
+            generator_loss = tf.reduce_mean(generator_loss,1)
+
+            disc_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=self.disc_logits, labels=tf.ones_like(
+                    self.disc_logits))
+            disc_loss = tf.reduce_mean(disc_loss, 1)
+
 
             # Entropy loss
-            logits = tf.concat([self.generator_logits, self.disc_logits], 0)
+            logits = tf.concat([self.generator_logits, self.disc_logits], 1)
             entropy = tf.reduce_mean(logit_bernoulli_entropy(logits))
 
             # Latent loss
@@ -312,73 +315,10 @@ class GAIL(TrajectoryIRL):
             self.generator_loss = tf.reduce_mean(generator_loss)
             self.disc_loss = tf.reduce_mean(disc_loss)
 
-            self.entropy_loss = -0.0001 * entropy
+            self.entropy_loss = -0.0000 * entropy
 
-            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                         scope=self.name)
-
-            # Possible clipping from WGAN
-            clip_ops = []
-            for var in var_list:
-                clip_bounds = [-.01, .01]
-                clip_ops.append(
-                    tf.assign(
-                        var,
-                        tf.clip_by_value(var, clip_bounds[0], clip_bounds[1])
-                    )
-                )
-            self.clip_disc_weights_op = tf.group(*clip_ops)
-            l2_penalty_weight = 0.0001
-
-            wgan_loss = self.disc_loss - self.generator_loss
-            self.total_loss = self.entropy_loss + wgan_loss
-
-            if l2_penalty_weight > 0.0:
-                loss_l2 = tf.add_n([tf.nn.l2_loss(v) for v in var_list if
-                                    'gail' in v.name and not (
-                                            'Adam' in v.name)]) / float(
-                    len(var_list)) * l2_penalty_weight
-                self.l2_loss = loss_l2
-                self.total_loss += loss_l2
-
-            gradient_penalty_weight = 0.01
-            if gradient_penalty_weight > 0.0:
-                hidden_sizes = [32, 32]
-                batch_size = tf.shape(self.obs_t_gen)[0]
-                num_experts = tf.cast(tf.count_nonzero(self.obs_t_disc),
-                                      tf.int32)
-                smallest = batch_size
-
-                alpha = tf.random_uniform(
-                    shape=[smallest, 1],
-                    minval=0.,
-                    maxval=1.
-                )
-                ln = tf.reshape(self.obs_t_gen, [-1, 1])
-                alpha_in = alpha * ln[-smallest:]
-                beta_in = ((1 - alpha) * ln[:smallest])
-                interpolates = alpha_in + beta_in
-                net2 = interpolates
-
-                for i, x in enumerate(hidden_sizes):
-                    net2 = tf.layers.dense(inputs=net2, units=x,
-                                           activation=tf.tanh,
-                                           kernel_initializer=tf.random_uniform_initializer(
-                                               -0.05, 0.05),
-                                           name="discriminator_h%d" % i)
-                net2 = tf.layers.dense(inputs=net2, units=1,
-                                       activation=None,
-                                       kernel_initializer=tf.random_uniform_initializer(
-                                           -0.05, 0.05),
-                                       name="discriminator_outlayer")
-
-                gradients = tf.gradients(net2, [interpolates])[0]
-                gradients = tf.clip_by_value(gradients, -10., 10.)
-                slopes = tf.sqrt(
-                    tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-                gradient_penalty = gradient_penalty_weight * tf.reduce_mean(
-                    (slopes - 1) ** 2)
-                self.total_loss += gradient_penalty
+            self.total_loss = self.entropy_loss + self.disc_loss + \
+                              self.generator_loss
 
             self.step = self.optimizer.minimize(self.total_loss)
             self.latent_step = self.latent_optimizer.minimize(self.latent_loss)
@@ -405,7 +345,7 @@ class GAIL(TrajectoryIRL):
             if latent:
                 with tf.variable_scope('latent'):
                     p_h1 = tf.contrib.layers.fully_connected(_input,
-                                                             128,
+                                                             512,
                                                              activation_fn=tf.nn.tanh)
                     p_h2 = tf.contrib.layers.fully_connected(p_h1, 128,
                                                              activation_fn=tf.nn.tanh)
@@ -528,13 +468,12 @@ class GAIL(TrajectoryIRL):
                 self.disc_lengths_mask: disc_lengths_mask,
                 self.gen_lengths_mask: gen_lengths_mask,
                 self.lr: 0.0001,
-                self.latent_lr: 0.0001
+                self.latent_lr: 0.01
             }
 
             if debug:
                 sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-            loss, _, _, = sess.run([self.total_loss, self.step,
-                                    self.clip_disc_weights_op],
+            loss, _ = sess.run([self.total_loss, self.step],
                                    feed_dict=feed_dict)
 
             latent_loss, _ = sess.run([self.latent_loss, self.latent_step],
@@ -548,8 +487,7 @@ class GAIL(TrajectoryIRL):
                 mean_latent_loss = it.pop_mean('latent_loss')
                 print('\tLoss:%f' % mean_loss)
                 print('\tLatent Loss:%f' % mean_latent_loss)
-        # summary = sess.run(tf.summary.merge([tf.summary.scalar('mean_loss',
-        #                                                 mean_loss)]),{})
+
 
         summary = tf.get_default_session().run(self.summary, feed_dict)
         return mean_loss, mean_latent_loss, summary
@@ -610,7 +548,8 @@ class GAIL(TrajectoryIRL):
         # reward = log D(s, a)
         scores = scores[:, 0]
         scores = scores.reshape(-1, self.max_length)
-        scores = scores + np.expand_dims(latent_rewards, 1)
+        template = np.ones_like(scores)
+        scores = scores + (template.T * [latent_rewards]).T / template.shape[1]
         return scores
 
 
