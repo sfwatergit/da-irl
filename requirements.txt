@@ -72,7 +72,7 @@ singledispatch==3.4.0.3
 six==1.11.0
 SQLAlchemy==1.1.13
 subprocess32==3.2.7
-tensorflow==1.4.0
+tensorflow==2.5.1
 terminado==0.6
 testpath==0.3.1
 toolz==0.8.2
